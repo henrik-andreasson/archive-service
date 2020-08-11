@@ -37,3 +37,7 @@ the file at the archive eg:
 ```
 archive/3.3.3.3/other/2019-08-06/f71f4bd0-22de-474e-8554-81f381e766ed
 ```
+
+# Docs
+
+[docs](https://github.com/henrik-andreasson/archive-service/tree/master/docs)
