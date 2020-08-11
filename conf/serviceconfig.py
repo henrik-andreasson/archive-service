@@ -11,4 +11,4 @@ class Config(object):
     ALLOWED_IPS_HEALTH = os.environ.get('ARCHIVE_IPS_HEALTH') or ["127.0.0.1", "127.0.0.2"]
     ALLOWREMOVE = os.environ.get('ARCHIVE_ALLOWREMOVE') or 1
     DEBUG = os.environ.get('ARCHIVE_DEBUG') or 0
-    LOG_FILE = os.environ.get('ARCHIVE_LOGFILE') or "/home/han/devel/archive-service/logs/archive-service.log"
+    LOG_FILE = os.environ.get('ARCHIVE_LOGFILE') or "logs/archive-service.log"

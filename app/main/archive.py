@@ -8,7 +8,6 @@ import datetime
 from os import listdir
 from os.path import isfile, isdir
 import json
-from archive import app
 from app.main import bp
 from flask import jsonify
 
@@ -19,21 +18,30 @@ def calc_hash_from_file(file):
     return sha256.hexdigest()
 
 
+def apidoc():
+    print(store.__doc__)
+    print(get.__doc__)
+    print(hash.__doc__)
+    print(list.__doc__)
+    print(delete.__doc__)
+    print(health.__doc__)
+
+
 def return_response(retdata):
     response = jsonify(retdata)
     if 'status_code' not in retdata:
-        app.logger.error('status_code missing in call to return_response')
+        current_app.logger.error('status_code missing in call to return_response')
         response.status_code = 500
     else:
         response.status_code = retdata['status_code']
 
-    app.logger.info(json.dumps(retdata))
+    current_app.logger.info(json.dumps(retdata))
     return response
 
 
 @bp.route('/', methods=['GET', 'POST'])
 def root():
-    app.logger.info('service root accessed, noop')
+    current_app.logger.info('service root accessed, noop')
     retdata = {}
     retdata['module'] = 'root'
     retdata['status_code'] = 200
@@ -43,7 +51,7 @@ def root():
 
 @bp.route('/archive/store/v1', methods=['POST'])
 def store():
-    """store
+    """## store
     takes two parameters in a POST: bucket and a file
 
     * bucket is one of the allowed bucket names
@@ -53,7 +61,7 @@ def store():
 
     filename:%s;bucket:%s;date:%s;sha256:%s;uuid:%s
     """
-    app.logger.debug("store method called")
+    current_app.logger.debug("store method called")
 
     retdata = {}
     retdata['module'] = 'store'
@@ -73,7 +81,7 @@ def store():
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
 
-    app.logger.debug("store: bucket: %s" % bucket)
+    current_app.logger.debug("store: bucket: %s" % bucket)
 
     msgid = uuid.uuid4()
     file = request.files['file']
@@ -83,25 +91,25 @@ def store():
         return return_response(retdata)
 
     filename = secure_filename(str(msgid))
-    app.logger.debug('store: file uuid: %s' % filename)
+    current_app.logger.debug('store: file uuid: %s' % filename)
 
     if request.headers.getlist("X-Forwarded-For"):
         remote_addr = request.headers.getlist("X-Forwarded-For")[0]
     else:
         remote_addr = request.remote_addr
-    app.logger.debug('store: remote ip: %s ' % remote_addr)
+    current_app.logger.debug('store: remote ip: %s ' % remote_addr)
 
     date_path = datetime.datetime.now().strftime("%Y-%m-%d")
     pathwremote_host = os.path.join(
         current_app.config['UPLOAD_FOLDER'], remote_addr, bucket, date_path)
-    app.logger.debug('storing file at: %s' % pathwremote_host)
+    current_app.logger.debug('storing file at: %s' % pathwremote_host)
 
     if not os.path.exists(pathwremote_host):
         os.makedirs(pathwremote_host)
     abspathfile = os.path.join(pathwremote_host, filename)
     file.save(abspathfile)
 
-    app.logger.info('store: file stored at: %s' % abspathfile)
+    current_app.logger.info('store: file stored at: %s' % abspathfile)
     hash = calc_hash_from_file(abspathfile)
 
     retdata['status_code'] = 200
@@ -116,14 +124,14 @@ def store():
 
 @bp.route('/archive/get/v1/<bucket>/<date>/<filename>', methods=['GET'])
 def get(bucket=None, date=None, filename=None):
-    """get
+    """## get
     takes three parameters in the rest api: bucket, date and a filename
     * bucket where the file was stored (one of the allowed bucket names)
     * date when the file was stored (has to be formated YYYY-MM-DD)
     * filename is the uuid(4) received by the server when storing files
     returns the file or FAIL
     """
-    app.logger.debug("get method called")
+    current_app.logger.debug("get method called")
 
     retdata = {}
     retdata['module'] = 'get'
@@ -148,14 +156,14 @@ def get(bucket=None, date=None, filename=None):
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
 
-    app.logger.info('get: bucket ok: %s' % bucket)
+    current_app.logger.info('get: bucket ok: %s' % bucket)
 
-    app.logger.debug('get: bucket: %s date: %s file %s' % (bucket, date, filename))
+    current_app.logger.debug('get: bucket: %s date: %s file %s' % (bucket, date, filename))
     if request.headers.getlist("X-Forwarded-For"):
         remote_addr = request.headers.getlist("X-Forwarded-For")[0]
     else:
         remote_addr = request.remote_addr
-    app.logger.debug('get: remote ip: %s ' % remote_addr)
+    current_app.logger.debug('get: remote ip: %s ' % remote_addr)
 
     abspath = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
                            bucket, date)
@@ -163,10 +171,10 @@ def get(bucket=None, date=None, filename=None):
     abspathfile = os.path.join(current_app.config['UPLOAD_FOLDER'],
                                remote_addr, bucket, date, filename)
 
-    app.logger.debug("get: looking for file on disk: %s" % abspathfile)
+    current_app.logger.debug("get: looking for file on disk: %s" % abspathfile)
 
     if isfile(abspathfile):
-        app.logger.info("get: serving file from path: {} and file: {}".format(abspath, filename))
+        current_app.logger.info("get: serving file from path: {} and file: {}".format(abspath, filename))
         return send_from_directory(directory=abspath, filename=filename, as_attachment=True)
 
     else:
@@ -177,7 +185,7 @@ def get(bucket=None, date=None, filename=None):
 
 @bp.route('/archive/hash/v1/<bucket>/<date>/<filename>', methods=['GET'])
 def hash(bucket=None, date=None, filename=None):
-    """hash
+    """## hash
     takes three parameters in the rest api:
 
     * bucket where the file was stored (one of the allowed bucket names)
@@ -187,7 +195,7 @@ def hash(bucket=None, date=None, filename=None):
     returns the hash of the file or FAIL
     """
 
-    app.logger.debug("hash method called")
+    current_app.logger.debug("hash method called")
 
     retdata = {}
     retdata['module'] = 'hash'
@@ -212,22 +220,22 @@ def hash(bucket=None, date=None, filename=None):
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
 
-    app.logger.debug('hash: bucket: %s date: %s file %s' % (
+    current_app.logger.debug('hash: bucket: %s date: %s file %s' % (
                  bucket, date, filename))
     if request.headers.getlist("X-Forwarded-For"):
         remote_addr = request.headers.getlist("X-Forwarded-For")[0]
     else:
         remote_addr = request.remote_addr
 
-    app.logger.debug('hash: remote ip: %s ' % remote_addr)
+    current_app.logger.debug('hash: remote ip: %s ' % remote_addr)
 
     abspathfile = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
                                bucket, date, filename)
 
-    app.logger.debug("hash: looking for file on disk: %s" % abspathfile)
+    current_app.logger.debug("hash: looking for file on disk: %s" % abspathfile)
 
     if isfile(abspathfile):
-        app.logger.debug('getting hash of file at: %s' % abspathfile)
+        current_app.logger.debug('getting hash of file at: %s' % abspathfile)
         hash = calc_hash_from_file(abspathfile)
 
         retdata['status_code'] = 200
@@ -249,7 +257,7 @@ def hash(bucket=None, date=None, filename=None):
 
 @bp.route('/archive/delete/v1/<bucket>/<date>/<filename>')
 def delete(bucket="other", date=None, filename=None):
-    """
+    """## delete
     delete must explicitly be allowed (default off) ,
     takes three parameters in the rest api:
 
@@ -259,7 +267,7 @@ def delete(bucket="other", date=None, filename=None):
 
     returns DELOK or DELFAIL and a string describing the file
     """
-    app.logger.debug("delete method called")
+    current_app.logger.debug("delete method called")
 
     retdata = {}
     retdata['module'] = 'delete'
@@ -292,17 +300,17 @@ def delete(bucket="other", date=None, filename=None):
         retdata['date'] = date
         return return_response(retdata)
 
-    app.logger.debug('delete: bucket: %s date: %s file %s' % (
+    current_app.logger.debug('delete: bucket: %s date: %s file %s' % (
         bucket, date, filename))
     if request.headers.getlist("X-Forwarded-For"):
         remote_addr = request.headers.getlist("X-Forwarded-For")[0]
     else:
         remote_addr = request.remote_addr
-    app.logger.debug('delete: remote ip: %s ' % remote_addr)
+    current_app.logger.debug('delete: remote ip: %s ' % remote_addr)
 
     abs_path = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
                             bucket, date, filename)
-    app.logger.debug('deleteing file at: %s' % abs_path)
+    current_app.logger.debug('deleteing file at: %s' % abs_path)
 
     if not os.path.exists(abs_path):
         retdata['status_code'] = 403
@@ -327,7 +335,7 @@ def delete(bucket="other", date=None, filename=None):
 @bp.route('/archive/list/v1/<bucket>/')
 @bp.route('/archive/list/v1/')
 def list(bucket=None, date=None):
-    """
+    """## list
 
     * if called with /<bucket>/<date>/ the available uuid:s is listed
     * if called with /<bucket>/ the available dates:s is listed
@@ -338,13 +346,13 @@ def list(bucket=None, date=None):
 
     returns json string with findings
     """
-    app.logger.debug("list method called")
+    current_app.logger.debug("list method called")
 
     if request.headers.getlist("X-Forwarded-For"):
         remote_addr = request.headers.getlist("X-Forwarded-For")[0]
     else:
         remote_addr = request.remote_addr
-    app.logger.debug('list: remote ip: %s ' % remote_addr)
+    current_app.logger.debug('list: remote ip: %s ' % remote_addr)
 
     retdata = {}
     retdata['module'] = 'list'
@@ -375,7 +383,7 @@ def list(bucket=None, date=None):
         response = jsonify(onlyfiles)
         retdata['message'] = "listing files at {}".format(abs_path)
         retdata['status_code'] = 200
-        app.logger.info(json.dumps(retdata))
+        current_app.logger.info(json.dumps(retdata))
         response.status_code = retdata['status_code']
         return response
 
@@ -383,8 +391,7 @@ def list(bucket=None, date=None):
 @bp.route('/archive/health/v1/<verbose>/', methods=['GET'])
 @bp.route('/archive/health/v1/', methods=['GET'])
 def health(verbose=None):
-    """
-        health
+    """## health
 
         takes one optional parameter in the rest api
 
@@ -396,7 +403,7 @@ def health(verbose=None):
         returns 500 ERROR date: <date>: <description of error> if some error
         is found
     """
-    app.logger.debug("health method called")
+    current_app.logger.debug("health method called")
 
     retdata = {}
     retdata['module'] = 'health'
@@ -405,11 +412,11 @@ def health(verbose=None):
         remote_addr = request.headers.getlist("X-Forwarded-For")[0]
     else:
         remote_addr = request.remote_addr
-    app.logger.debug('health: remote ip: %s ' % remote_addr)
+    current_app.logger.debug('health: remote ip: %s ' % remote_addr)
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if remote_addr in current_app.config['ALLOWED_IPS_HEALTH']:
-        app.logger.debug('health: ip allowed to probe health: %s' % remote_addr)
+        current_app.logger.debug('health: ip allowed to probe health: %s' % remote_addr)
     else:
         retdata['status_code'] = 403
         retdata['message'] = "ERROR"
@@ -420,7 +427,7 @@ def health(verbose=None):
     filename = "health.check"
     abspathfile = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
 
-    app.logger.debug("health: writing testfile on disk at: %s" % abspathfile)
+    current_app.logger.debug("health: writing testfile on disk at: %s" % abspathfile)
 
     if not os.path.exists(current_app.config['UPLOAD_FOLDER']):
         retdata['status_code'] = 500
