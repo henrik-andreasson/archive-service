@@ -32,7 +32,7 @@ mkdir -p tmp/opt/archive/
 
 cp -r app bin conf docs files logs archive.py gunicorn-start.sh tmp/var/www/apps/archive/
 
-fpm -s dir -t rpm -n ${NAME} -v ${VERSION} --iteration "${RELEASE}" ${DEPENDS} \
+fpm -s dir -t deb -n ${NAME} -v ${VERSION} --iteration "${RELEASE}" ${DEPENDS} \
   --url "${URL}" --vendor "${VENDOR}" --maintainer "${MAINTAINER}" \
   --description "${DESCRIPTION}" ${DIRECTORIES}   --force --epoch 0 -C tmp .
 
