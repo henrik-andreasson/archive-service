@@ -4,9 +4,10 @@ import os
 
 
 def create_logger(app):
-    if not os.path.exists('logs'):
-        os.mkdir('logs')
-    file_handler = RotatingFileHandler(app.config['LOG_FILE'], maxBytes=10240, backupCount=10)
+    if not os.path.exists(app.config['ARCHIVE_LOG_DIR']):
+        os.mkdir(app.config['ARCHIVE_LOG_DIR'])
+    file_abs_path = "%s/%s" % (app.config['ARCHIVE_LOG_DIR'], app.config['ARCHIVE_LOG_FILE'])
+    file_handler = RotatingFileHandler(file_abs_path, maxBytes=10240, backupCount=10)
 
     for handler in app.logger.handlers:
         app.logger.removeHandler(handler)

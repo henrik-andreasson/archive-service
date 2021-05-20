@@ -4,11 +4,12 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 class Config(object):
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
+    ARCHIVE_SECRET_KEY = os.environ.get('ARCHIVE_SECRET_KEY') or 'you-will-never-guess'
     ARCHIVE_TZ = os.environ.get('ARCHIVE_TZ') or "Europe/Stockholm"
-    UPLOAD_FOLDER = os.environ.get('ARCHIVE_ULDIR') or "/home/han/devel/archive-service/files"
-    ALLOWED_BUCKETS = os.environ.get('ARCHIVE_BUCKETS') or ["cert", "other", "log", "config", "admin", "backups"]
-    ALLOWED_IPS_HEALTH = os.environ.get('ARCHIVE_IPS_HEALTH') or ["127.0.0.1", "127.0.0.2"]
-    ALLOWREMOVE = os.environ.get('ARCHIVE_ALLOWREMOVE') or 1
-    DEBUG = os.environ.get('ARCHIVE_DEBUG') or 0
-    LOG_FILE = os.environ.get('ARCHIVE_LOGFILE') or "logs/archive-service.log"
+    ARCHIVE_UPLOAD_DIR = os.environ.get('ARCHIVE_UPLOAD_DIR') or "/home/han/devel/archive-service/files"
+    ARCHIVE_BUCKETS = os.environ.get('ARCHIVE_BUCKETS') or ["cert", "other", "log", "config", "admin", "backups"]
+    ARCHIVE_IPS_HEALTH = os.environ.get('ARCHIVE_IPS_HEALTH') or ["127.0.0.1", "127.0.0.2"]
+    ARCHIVE_ALLOW_REMOVE = os.environ.get('ARCHIVE_ALLOW_REMOVE') or 1
+    ARCHIVE_DEBUG = os.environ.get('ARCHIVE_') or 0
+    ARCHIVE_LOG_DIR = os.environ.get('ARCHIVE_LOG_DIR') or "logs"
+    ARCHIVE_LOGFILE = os.environ.get('ARCHIVE_LOGFILE') or "archive-service.log"

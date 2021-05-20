@@ -54,7 +54,7 @@ will print api doc
 
         returns 200 ALLOK: date: <date> if all health checks is ok
         returns 403 ERROR date: <date> notallowed if ip not in
-             ALLOWED_IPS_HEALTH
+             ARCHIVE_IPS_HEALTH
         returns 500 ERROR date: <date>: <description of error> if some error
         is found
     

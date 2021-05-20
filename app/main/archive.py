@@ -76,7 +76,7 @@ def store():
         retdata['message'] = "Bucket is required"
         return return_response(retdata)
 
-    if bucket not in current_app.config['ALLOWED_BUCKETS']:
+    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
         retdata['status_code'] = 403
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
@@ -101,7 +101,7 @@ def store():
 
     date_path = datetime.datetime.now().strftime("%Y-%m-%d")
     pathwremote_host = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], remote_addr, bucket, date_path)
+        current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr, bucket, date_path)
     current_app.logger.debug('storing file at: %s' % pathwremote_host)
 
     if not os.path.exists(pathwremote_host):
@@ -151,7 +151,7 @@ def get(bucket=None, date=None, filename=None):
         retdata['message'] = "Filename is required"
         return return_response(retdata)
 
-    if bucket not in current_app.config['ALLOWED_BUCKETS']:
+    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
         retdata['status_code'] = 403
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
@@ -165,10 +165,10 @@ def get(bucket=None, date=None, filename=None):
         remote_addr = request.remote_addr
     current_app.logger.debug('get: remote ip: %s ' % remote_addr)
 
-    abspath = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
+    abspath = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
                            bucket, date)
 
-    abspathfile = os.path.join(current_app.config['UPLOAD_FOLDER'],
+    abspathfile = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'],
                                remote_addr, bucket, date, filename)
 
     current_app.logger.debug("get: looking for file on disk: %s" % abspathfile)
@@ -215,7 +215,7 @@ def hash(bucket=None, date=None, filename=None):
         retdata['message'] = "Filename is required"
         return return_response(retdata)
 
-    if bucket not in current_app.config['ALLOWED_BUCKETS']:
+    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
         retdata['status_code'] = 403
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
@@ -229,7 +229,7 @@ def hash(bucket=None, date=None, filename=None):
 
     current_app.logger.debug('hash: remote ip: %s ' % remote_addr)
 
-    abspathfile = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
+    abspathfile = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
                                bucket, date, filename)
 
     current_app.logger.debug("hash: looking for file on disk: %s" % abspathfile)
@@ -287,7 +287,7 @@ def delete(bucket="other", date=None, filename=None):
         retdata['message'] = "Filename is required"
         return return_response(retdata)
 
-    if bucket not in current_app.config['ALLOWED_BUCKETS']:
+    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
         retdata['status_code'] = 403
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
@@ -308,7 +308,7 @@ def delete(bucket="other", date=None, filename=None):
         remote_addr = request.remote_addr
     current_app.logger.debug('delete: remote ip: %s ' % remote_addr)
 
-    abs_path = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
+    abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
                             bucket, date, filename)
     current_app.logger.debug('deleteing file at: %s' % abs_path)
 
@@ -358,17 +358,17 @@ def list(bucket=None, date=None):
     retdata['module'] = 'list'
 
     if bucket and date:
-        abs_path = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
+        abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
                                 bucket, date)
         retdata['date'] = date
 
     elif bucket:
-        abs_path = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr,
+        abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
                                 bucket)
         retdata['bucket'] = bucket
 
     else:
-        abs_path = os.path.join(current_app.config['UPLOAD_FOLDER'], remote_addr)
+        abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr)
 
     if isdir(abs_path) is False:
         retdata['status_code'] = 500
@@ -399,7 +399,7 @@ def health(verbose=None):
 
         returns 200 ALLOK: date: <date> if all health checks is ok
         returns 403 ERROR date: <date> notallowed if ip not in
-             ALLOWED_IPS_HEALTH
+             ARCHIVE_IPS_HEALTH
         returns 500 ERROR date: <date>: <description of error> if some error
         is found
     """
@@ -415,7 +415,7 @@ def health(verbose=None):
     current_app.logger.debug('health: remote ip: %s ' % remote_addr)
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    if remote_addr in current_app.config['ALLOWED_IPS_HEALTH']:
+    if remote_addr in current_app.config['ARCHIVE_IPS_HEALTH']:
         current_app.logger.debug('health: ip allowed to probe health: %s' % remote_addr)
     else:
         retdata['status_code'] = 403
@@ -425,11 +425,11 @@ def health(verbose=None):
         return return_response(retdata)
 
     filename = "health.check"
-    abspathfile = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+    abspathfile = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], filename)
 
     current_app.logger.debug("health: writing testfile on disk at: %s" % abspathfile)
 
-    if not os.path.exists(current_app.config['UPLOAD_FOLDER']):
+    if not os.path.exists(current_app.config['ARCHIVE_UPLOAD_DIR']):
         retdata['status_code'] = 500
         retdata['message'] = "ERROR"
         retdata['date'] = date
