@@ -45,13 +45,13 @@ fi
 
 if [ $USE_CERT -gt 1 ] ; then
 
-    gunicorn inventorpy:app -b 0.0.0.0:${LISTEN} \
+    gunicorn archive-service:app -b 0.0.0.0:${LISTEN} \
          --pid "${INSTALL_PATH}/archive.pid" \
          --keyfile "${INSTALL_PATH}/key.pem"  \
          --certfile  "${INSTALL_PATH}/cert.pem" ${EXTRA_OPTIONS}
 
 else
 
-    gunicorn archive:app -b 0.0.0.0:${LISTEN} ${EXTRA_OPTIONS}
+    gunicorn archive-service:app -b 0.0.0.0:${LISTEN} ${EXTRA_OPTIONS}
 
 fi
