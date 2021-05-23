@@ -2,7 +2,7 @@
 FROM centos:latest
 
 # Set the working directory to /app
-#DEV: WORKDIR /archive-service
+WORKDIR /archive-service
 
 COPY . /archive-service
 
@@ -15,7 +15,8 @@ RUN pip3 install  flask-login  \
 # Make port available to the world outside this container
 EXPOSE 5002
 
-ENV FLASK_APP=archive.py
+ENV FLASK_APP=/archive-service/archive-service.py
+
 
 # Run flask when the container launches
 CMD [ "/archive-service/gunicorn-start.sh"]

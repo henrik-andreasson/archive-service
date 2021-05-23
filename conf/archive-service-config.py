@@ -1,6 +1,6 @@
 ARCHIVE_SECRET_KEY = "foo123"
-# ARCHIVE_TZ={{archive_time_zone}}
-ARCHIVE_UPLOAD_DIR = "/tmp"
+ARCHIVE_TZ = "Europe/Stockholm"
+ARCHIVE_UPLOAD_DIR = "/var/tmp"
 ARCHIVE_BUCKETS = '"foo","bar"'
 ARCHIVE_IPS_HEALTH = '"127.0.0.1"'
 ARCHIVE_ALLOW_REMOVE = "true"

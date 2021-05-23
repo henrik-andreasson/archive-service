@@ -12,4 +12,4 @@ class Config(object):
     ARCHIVE_ALLOW_REMOVE = os.environ.get('ARCHIVE_ALLOW_REMOVE') or 1
     ARCHIVE_DEBUG = os.environ.get('ARCHIVE_DEBUG') or 0
     ARCHIVE_LOG_DIR = os.environ.get('ARCHIVE_LOG_DIR') or "/tmp"
-    ARCHIVE_LOGFILE = os.environ.get('ARCHIVE_LOGFILE') or "archive-service.log"
+    ARCHIVE_LOG_FILE = os.environ.get('ARCHIVE_LOGFILE') or "archive-service.log"
