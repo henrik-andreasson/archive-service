@@ -124,7 +124,7 @@ def store():
 
 @bp.route('/archive/get/v1/<bucket>/<date>/<filename>', methods=['GET'])
 def get(bucket=None, date=None, filename=None):
-    """## get
+    """## get /archive/get/v1/<bucket>/<date>/<filename>
     takes three parameters in the rest api: bucket, date and a filename
     * bucket where the file was stored (one of the allowed bucket names)
     * date when the file was stored (has to be formated YYYY-MM-DD)
@@ -175,7 +175,7 @@ def get(bucket=None, date=None, filename=None):
 
     if isfile(abspathfile):
         current_app.logger.info("get: serving file from path: {} and file: {}".format(abspath, filename))
-        return send_from_directory(directory=abspath, filename=filename, as_attachment=True)
+        return send_from_directory(abspath, filename, as_attachment=True)
 
     else:
         retdata['status_code'] = 500
@@ -292,7 +292,7 @@ def delete(bucket="other", date=None, filename=None):
         retdata['message'] = "Bucket name is not allowed"
         return return_response(retdata)
 
-    if current_app.config['ALLOWREMOVE'] == 0:
+    if current_app.config['ARCHIVE_ALLOW_REMOVE'] == 0:
         retdata['status_code'] = 403
         retdata['message'] = "FAIL: delete not allowed"
         retdata['filename'] = filename
