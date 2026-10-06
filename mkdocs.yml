@@ -1,0 +1,46 @@
+site_name: Archive Service
+site_description: Simple archive for files, with a client that verifies and deletes local copies
+repo_url: https://github.com/henrik-andreasson/archive-service
+edit_uri: edit/master/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+
+nav:
+  - Overview: index.md
+  - Server:
+      - Run the server: run-server.md
+      - Docker: docker.md
+      - Configuration: configuration.md
+      - TLS and client certificates: tls.md
+  - Client: client.md
+  - API: api-doc.md
+  - Development: development.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+validation:
+  links:
+    anchors: warn

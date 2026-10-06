@@ -1,60 +1,77 @@
-will print api doc
-## store
-    takes two parameters in a POST: bucket and a file
+# Archive service API
 
-    * bucket is one of the allowed bucket names
-    * file is the file to archive, the filename is not used
+## Responses
 
-    returns a list of data first OK or FAIL then:
+All responses except a successful `get` (the file) and `list` (a json list)
+are json objects:
 
-    filename:%s;bucket:%s;date:%s;sha256:%s;uuid:%s
-    
-## get
-    takes three parameters in the rest api: bucket, date and a filename
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-    * filename is the uuid(4) received by the server when storing files
-    returns the file or FAIL
-    
-## hash
-    takes three parameters in the rest api:
+    {"module": "<endpoint>", "status_code": <code>, "message": "<text>", ...}
 
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-    * filename is the uuid(4) received by the server when storing files
+Status codes used by all endpoints:
 
-    returns the hash of the file or FAIL
-    
-## list
+* 200 ok
+* 400 bad request: missing or invalid parameter, invalid client address
+* 403 forbidden: bucket not allowed, delete not enabled, not allowed to
+  call health
+* 404 not found: the file does not exist, or unknown url
+* 405 method not allowed
+* 413 the upload is larger than ARCHIVE_MAX_UPLOAD_MB
+* 500 internal server error
+* 503 health check failed
 
-    * if called with /<bucket>/<date>/ the available uuid:s is listed
-    * if called with /<bucket>/ the available dates:s is listed
-    * if called with / the available buckets:s is listed
+## store `POST /archive/store/v1`
 
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
+takes two parameters in a multipart POST:
 
-    returns json string with findings
-    
-## delete
-    delete must explicitly be allowed (default off) ,
-    takes three parameters in the rest api:
+* bucket - one of the allowed bucket names
+* file - the file to archive, the filename is not used
 
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-    * filename is the uuid(4) received by the server when storing files
+returns 200 with the uuid, bucket, date and sha256 (server_hash) of the
+stored file, the uuid and date are needed to get the file back.
+400 if bucket or file is missing, 403 if the bucket is not allowed,
+413 if the file is larger than ARCHIVE_MAX_UPLOAD_MB.
 
-    returns DELOK or DELFAIL and a string describing the file
-    
-## health
+## get `GET /archive/get/v1/<bucket>/<date>/<uuid>`
 
-        takes one optional parameter in the rest api
+* bucket - where the file was stored
+* date - when the file was stored, YYYY-MM-DD
+* uuid - returned by store
 
-        * verbose - returns more information about health status
+returns 200 with the file, 404 if there is no such file.
 
-        returns 200 ALLOK: date: <date> if all health checks is ok
-        returns 403 ERROR date: <date> notallowed if ip not in
-             ARCHIVE_IPS_HEALTH
-        returns 500 ERROR date: <date>: <description of error> if some error
-        is found
-    
+## hash `GET /archive/hash/v1/<bucket>/<date>/<uuid>`
+
+* bucket - where the file was stored
+* date - when the file was stored, YYYY-MM-DD
+* uuid - returned by store
+
+returns 200 with the sha256 of the file (hash_remote), 404 if there is no
+such file.
+
+## list `GET /archive/list/v1/[<bucket>/[<date>/]]`
+
+* `/archive/list/v1/` - the buckets the client has stored files in
+* `/archive/list/v1/<bucket>/` - the dates in a bucket
+* `/archive/list/v1/<bucket>/<date>/` - the uuids stored on a date
+
+returns 200 with a json list, an empty list if nothing is stored.
+
+## delete `DELETE /archive/delete/v1/<bucket>/<date>/<uuid>`
+
+must be enabled on the server with ARCHIVE_ALLOW_REMOVE=true (default off)
+
+* bucket - where the file was stored
+* date - when the file was stored, YYYY-MM-DD
+* uuid - returned by store
+
+returns 200 with the sha256 (hash_remote) of the deleted file, 403 if delete
+is not enabled, 404 if there is no such file.
+
+## health `GET /archive/health/v1/`
+
+only allowed from the ips in ARCHIVE_IPS_HEALTH, checks that a file can
+be written to the archive.
+
+returns 200 with message ALLOK if healthy, 403 if the client is not
+allowed, 503 with message ERROR and the reason if the check fails.
+

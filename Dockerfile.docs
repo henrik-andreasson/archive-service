@@ -1,0 +1,17 @@
+# Material for MkDocs, to preview and build the docs in docs/
+#
+#   docker build -f Dockerfile.docs -t archive-service-docs .
+#   docker run --rm -it -p 8000:8000 -v "$PWD":/docs archive-service-docs           # preview
+#   docker run --rm --user $(id -u):$(id -g) -v "$PWD":/docs \
+#     archive-service-docs build --strict                                          # build site/
+FROM python:3.13-slim
+
+WORKDIR /docs
+
+COPY requirements-docs.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements-docs.txt
+
+EXPOSE 8000
+
+ENTRYPOINT ["mkdocs"]
+CMD ["serve", "--dev-addr=0.0.0.0:8000"]
