@@ -1,9 +1,0 @@
-ARCHIVE_SECRET_KEY = "foo123"
-ARCHIVE_TZ = "Europe/Stockholm"
-ARCHIVE_UPLOAD_DIR = "/var/tmp"
-ARCHIVE_BUCKETS = '"foo","bar"'
-ARCHIVE_IPS_HEALTH = '"127.0.0.1"'
-ARCHIVE_ALLOW_REMOVE = "true"
-ARCHIVE_DEBUG = "true"
-ARCHIVE_LOG_DIR = "/tmp"
-ARCHIVE_LOG_FILE = "as.log"

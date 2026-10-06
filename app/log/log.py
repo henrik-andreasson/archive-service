@@ -1,28 +1,48 @@
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
+
+
+class JsonFormatter(logging.Formatter):
+    """one json object per line: time, name, loglevel and message"""
+
+    def format(self, record):
+        entry = {
+            "time": self.formatTime(record),
+            "name": record.name,
+            "loglevel": record.levelname,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(entry)
 
 
 def create_logger(app):
-    if not os.path.exists(app.config['ARCHIVE_LOG_DIR']):
-        os.mkdir(app.config['ARCHIVE_LOG_DIR'])
-    file_abs_path = "%s/%s" % (app.config['ARCHIVE_LOG_DIR'], app.config['ARCHIVE_LOG_FILE'])
-    file_handler = RotatingFileHandler(file_abs_path, maxBytes=10240, backupCount=10)
+    """log to the rotating file ARCHIVE_LOG_DIR/ARCHIVE_LOG_FILE and/or to
+    stderr (ARCHIVE_LOG_STDERR), if neither is set stderr is used"""
+    handlers = []
 
-    for handler in app.logger.handlers:
+    if app.config['ARCHIVE_LOG_FILE']:
+        os.makedirs(app.config['ARCHIVE_LOG_DIR'], exist_ok=True)
+        file_abs_path = os.path.join(app.config['ARCHIVE_LOG_DIR'], app.config['ARCHIVE_LOG_FILE'])
+        handlers.append(RotatingFileHandler(file_abs_path,
+                                            maxBytes=app.config['ARCHIVE_LOG_MAX_MB'] * 1024 * 1024,
+                                            backupCount=app.config['ARCHIVE_LOG_BACKUPS']))
+
+    if app.config['ARCHIVE_LOG_STDERR'] or not handlers:
+        handlers.append(logging.StreamHandler(sys.stderr))
+
+    for handler in list(app.logger.handlers):
         app.logger.removeHandler(handler)
 
-    app.logger.addHandler(file_handler)
+    level = logging.DEBUG if app.config['ARCHIVE_DEBUG'] else logging.INFO
+    for handler in handlers:
+        handler.setFormatter(JsonFormatter())
+        handler.setLevel(level)
+        app.logger.addHandler(handler)
+    app.logger.setLevel(level)
 
-    logstr = """{"time": "%(asctime)s", "name": "%(name)s", "loglevel": "%(levelname)s", "message": "%(message)s"}"""
-    file_handler.setFormatter(logging.Formatter(logstr))
-
-    if app.config['DEBUG']:
-        file_handler.setLevel(logging.DEBUG)
-        app.logger.setLevel(logging.DEBUG)
-        app.logger.debug('Archive Service startup')
-
-    else:
-        file_handler.setLevel(logging.INFO)
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('Archive Service startup')
+    app.logger.info('Archive Service startup')

@@ -10,5 +10,4 @@ def register(app):
 
     @doc.command()
     def printdoc():
-        print("will print api doc")
         apidoc()

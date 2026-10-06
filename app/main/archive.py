@@ -1,30 +1,92 @@
-#!/usr/bin/env python3
+import functools
+import inspect
+import tempfile
 import uuid
 import os
+import re
+import ipaddress
 from flask import request, send_from_directory, current_app
-from werkzeug.utils import secure_filename
 import hashlib
 import datetime
+from zoneinfo import ZoneInfo
 from os import listdir
 from os.path import isfile, isdir
 import json
 from app.main import bp
 from flask import jsonify
+from werkzeug.exceptions import HTTPException
+from conf.defaultserviceconfig import to_bool
+
+
+DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def now():
+    """current time in the configured ARCHIVE_TZ"""
+    return datetime.datetime.now(ZoneInfo(current_app.config['ARCHIVE_TZ']))
+
+
+def get_remote_addr():
+    """returns the client ip, or None if it is not a valid ip address
+
+    X-Forwarded-For is only used when ARCHIVE_PROXY_COUNT > 0, then ProxyFix
+    has already set remote_addr from the trusted proxies
+    """
+    try:
+        return str(ipaddress.ip_address(request.remote_addr))
+    except (ValueError, TypeError):
+        current_app.logger.error('invalid client address: %s' % request.remote_addr)
+        return None
+
+
+def check_path_args(date=None, filename=None):
+    """returns an error message if date or filename is not safe to use in a path"""
+    if date is not None and not DATE_RE.match(date):
+        return "Date must be formated YYYY-MM-DD"
+    if filename is not None:
+        try:
+            if str(uuid.UUID(filename)) != filename:
+                return "Filename must be a uuid"
+        except ValueError:
+            return "Filename must be a uuid"
+    return None
 
 
 def calc_hash_from_file(file):
+    sha256 = hashlib.sha256()
     with open(file, 'rb') as f:
-        sha256 = hashlib.sha256(f.read())
+        for chunk in iter(lambda: f.read(1024 * 1024), b''):
+            sha256.update(chunk)
     return sha256.hexdigest()
 
 
+API_RESPONSES_DOC = """## Responses
+
+All responses except a successful `get` (the file) and `list` (a json list)
+are json objects:
+
+    {"module": "<endpoint>", "status_code": <code>, "message": "<text>", ...}
+
+Status codes used by all endpoints:
+
+* 200 ok
+* 400 bad request: missing or invalid parameter, invalid client address
+* 403 forbidden: bucket not allowed, delete not enabled, not allowed to
+  call health
+* 404 not found: the file does not exist, or unknown url
+* 405 method not allowed
+* 413 the upload is larger than ARCHIVE_MAX_UPLOAD_MB
+* 500 internal server error
+* 503 health check failed
+"""
+
+
 def apidoc():
-    print(store.__doc__)
-    print(get.__doc__)
-    print(hash.__doc__)
-    print(list.__doc__)
-    print(delete.__doc__)
-    print(health.__doc__)
+    """print the api docs (markdown) from the endpoint docstrings"""
+    print("# Archive service API\n")
+    print(API_RESPONSES_DOC)
+    for view in (store, get, hash_file, list_files, delete, health):
+        print(inspect.getdoc(view) + "\n")
 
 
 def return_response(retdata):
@@ -39,417 +101,241 @@ def return_response(retdata):
     return response
 
 
+def respond(module, status_code, message, **extra):
+    """json response with module, status_code, message and any extra fields"""
+    retdata = {'module': module, 'status_code': status_code, 'message': message}
+    retdata.update(extra)
+    return return_response(retdata)
+
+
+class RequestError(Exception):
+    """a request that fails validation, carries the response to return"""
+
+    def __init__(self, response):
+        super().__init__()
+        self.response = response
+
+
+def check_bucket(module, bucket):
+    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
+        raise RequestError(respond(module, 403, "Bucket name is not allowed"))
+
+
+def client_path(module, bucket=None, date=None, filename=None):
+    """validates bucket, date, filename and the client address and returns
+    the path in the archive: <upload dir>/<client ip>[/bucket[/date[/filename]]]
+
+    raises RequestError with the error response if anything is not valid
+    """
+    if bucket is not None:
+        check_bucket(module, bucket)
+
+    error = check_path_args(date=date, filename=filename)
+    if error:
+        raise RequestError(respond(module, 400, error))
+
+    remote_addr = get_remote_addr()
+    if remote_addr is None:
+        raise RequestError(respond(module, 400, "Invalid client address"))
+
+    parts = [p for p in (bucket, date, filename) if p is not None]
+    path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr, *parts)
+    current_app.logger.debug('%s: remote ip: %s path: %s' % (module, remote_addr, path))
+    return path
+
+
+def handle_request_errors(view):
+    """return the response of a RequestError raised by the view"""
+    @functools.wraps(view)
+    def wrapper(*args, **kwargs):
+        try:
+            return view(*args, **kwargs)
+        except RequestError as e:
+            return e.response
+    return wrapper
+
+
+@bp.app_errorhandler(HTTPException)
+def http_error(e):
+    """json instead of the html error pages, eg. 404 unknown url, 405 wrong method"""
+    if e.code == 413:
+        return respond('error', 413, "Upload too large, the limit is %s MB"
+                       % current_app.config['ARCHIVE_MAX_UPLOAD_MB'])
+    return respond('error', e.code, e.name)
+
+
+@bp.app_errorhandler(Exception)
+def internal_error(e):
+    current_app.logger.exception("unhandled error: %s" % e)
+    return respond('error', 500, "Internal server error")
+
+
 @bp.route('/', methods=['GET', 'POST'])
 def root():
     current_app.logger.info('service root accessed, noop')
-    retdata = {}
-    retdata['module'] = 'root'
-    retdata['status_code'] = 200
-    retdata['message'] = "This is the archive service, please use the api docs or the client"
-    return return_response(retdata)
+    return respond('root', 200, "This is the archive service, please use the api docs or the client")
 
 
 @bp.route('/archive/store/v1', methods=['POST'])
+@handle_request_errors
 def store():
-    """## store
-    takes two parameters in a POST: bucket and a file
+    """## store `POST /archive/store/v1`
 
-    * bucket is one of the allowed bucket names
-    * file is the file to archive, the filename is not used
+    takes two parameters in a multipart POST:
 
-    returns a list of data first OK or FAIL then:
+    * bucket - one of the allowed bucket names
+    * file - the file to archive, the filename is not used
 
-    filename:%s;bucket:%s;date:%s;sha256:%s;uuid:%s
+    returns 200 with the uuid, bucket, date and sha256 (server_hash) of the
+    stored file, the uuid and date are needed to get the file back.
+    400 if bucket or file is missing, 403 if the bucket is not allowed,
+    413 if the file is larger than ARCHIVE_MAX_UPLOAD_MB.
     """
-    current_app.logger.debug("store method called")
-
-    retdata = {}
-    retdata['module'] = 'store'
-    if request.method != 'POST':
-        retdata['status_code'] = 500
-        retdata['message'] = "Store only allow POST"
-        return return_response(retdata)
-
     bucket = request.form.get('bucket')
     if bucket is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Bucket is required"
-        return return_response(retdata)
+        return respond('store', 400, "Bucket is required")
+    check_bucket('store', bucket)
 
-    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
-        retdata['status_code'] = 403
-        retdata['message'] = "Bucket name is not allowed"
-        return return_response(retdata)
-
-    current_app.logger.debug("store: bucket: %s" % bucket)
-
-    msgid = uuid.uuid4()
-    file = request.files['file']
+    file = request.files.get('file')
     if file is None:
-        retdata['status_code'] = 404
-        retdata['message'] = "UUID/Filename not found"
-        return return_response(retdata)
+        return respond('store', 400, "File is required")
+    file_uuid = str(uuid.uuid4())
+    date_path = now().strftime("%Y-%m-%d")
+    path = client_path('store', bucket, date_path)
 
-    filename = secure_filename(str(msgid))
-    current_app.logger.debug('store: file uuid: %s' % filename)
-
-    if request.headers.getlist("X-Forwarded-For"):
-        remote_addr = request.headers.getlist("X-Forwarded-For")[0]
-    else:
-        remote_addr = request.remote_addr
-    current_app.logger.debug('store: remote ip: %s ' % remote_addr)
-
-    date_path = datetime.datetime.now().strftime("%Y-%m-%d")
-    pathwremote_host = os.path.join(
-        current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr, bucket, date_path)
-    current_app.logger.debug('storing file at: %s' % pathwremote_host)
-
-    if not os.path.exists(pathwremote_host):
-        os.makedirs(pathwremote_host)
-    abspathfile = os.path.join(pathwremote_host, filename)
+    os.makedirs(path, exist_ok=True)
+    abspathfile = os.path.join(path, file_uuid)
     file.save(abspathfile)
-
     current_app.logger.info('store: file stored at: %s' % abspathfile)
-    hash = calc_hash_from_file(abspathfile)
 
-    retdata['status_code'] = 200
-    retdata['message'] = "OK"
-    retdata['filename'] = filename
-    retdata['bucket'] = bucket
-    retdata['date'] = date_path
-    retdata['server_hash'] = hash
-    retdata['uuid'] = str(msgid)
-    return return_response(retdata)
+    return respond('store', 200, "OK", filename=file_uuid, bucket=bucket, date=date_path,
+                   server_hash=calc_hash_from_file(abspathfile), uuid=file_uuid)
 
 
 @bp.route('/archive/get/v1/<bucket>/<date>/<filename>', methods=['GET'])
-def get(bucket=None, date=None, filename=None):
-    """## get /archive/get/v1/<bucket>/<date>/<filename>
-    takes three parameters in the rest api: bucket, date and a filename
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-    * filename is the uuid(4) received by the server when storing files
-    returns the file or FAIL
+@handle_request_errors
+def get(bucket, date, filename):
+    """## get `GET /archive/get/v1/<bucket>/<date>/<uuid>`
+
+    * bucket - where the file was stored
+    * date - when the file was stored, YYYY-MM-DD
+    * uuid - returned by store
+
+    returns 200 with the file, 404 if there is no such file.
     """
-    current_app.logger.debug("get method called")
+    abspathfile = client_path('get', bucket, date, filename)
 
-    retdata = {}
-    retdata['module'] = 'get'
+    if not isfile(abspathfile):
+        return respond('get', 404, "File not found", filename=filename, bucket=bucket, date=date)
 
-    if bucket is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Bucket is required"
-        return return_response(retdata)
-
-    if date is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Date is required"
-        return return_response(retdata)
-
-    if filename is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Filename is required"
-        return return_response(retdata)
-
-    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
-        retdata['status_code'] = 403
-        retdata['message'] = "Bucket name is not allowed"
-        return return_response(retdata)
-
-    current_app.logger.info('get: bucket ok: %s' % bucket)
-
-    current_app.logger.debug('get: bucket: %s date: %s file %s' % (bucket, date, filename))
-    if request.headers.getlist("X-Forwarded-For"):
-        remote_addr = request.headers.getlist("X-Forwarded-For")[0]
-    else:
-        remote_addr = request.remote_addr
-    current_app.logger.debug('get: remote ip: %s ' % remote_addr)
-
-    abspath = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
-                           bucket, date)
-
-    abspathfile = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'],
-                               remote_addr, bucket, date, filename)
-
-    current_app.logger.debug("get: looking for file on disk: %s" % abspathfile)
-
-    if isfile(abspathfile):
-        current_app.logger.info("get: serving file from path: {} and file: {}".format(abspath, filename))
-        return send_from_directory(abspath, filename, as_attachment=True)
-
-    else:
-        retdata['status_code'] = 500
-        retdata['message'] = "FAILED to serve file from disk"
-        return return_response(retdata)
+    current_app.logger.info("get: serving file: %s" % abspathfile)
+    return send_from_directory(os.path.dirname(abspathfile), filename, as_attachment=True)
 
 
 @bp.route('/archive/hash/v1/<bucket>/<date>/<filename>', methods=['GET'])
-def hash(bucket=None, date=None, filename=None):
-    """## hash
-    takes three parameters in the rest api:
+@handle_request_errors
+def hash_file(bucket, date, filename):
+    """## hash `GET /archive/hash/v1/<bucket>/<date>/<uuid>`
 
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-    * filename is the uuid(4) received by the server when storing files
+    * bucket - where the file was stored
+    * date - when the file was stored, YYYY-MM-DD
+    * uuid - returned by store
 
-    returns the hash of the file or FAIL
+    returns 200 with the sha256 of the file (hash_remote), 404 if there is no
+    such file.
     """
+    abspathfile = client_path('hash', bucket, date, filename)
+    file_info = {'filename': filename, 'bucket': bucket, 'date': date}
 
-    current_app.logger.debug("hash method called")
+    if not isfile(abspathfile):
+        return respond('hash', 404, "File not found", **file_info)
 
-    retdata = {}
-    retdata['module'] = 'hash'
-
-    if bucket is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Bucket is required"
-        return return_response(retdata)
-
-    if date is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Date is required"
-        return return_response(retdata)
-
-    if filename is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Filename is required"
-        return return_response(retdata)
-
-    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
-        retdata['status_code'] = 403
-        retdata['message'] = "Bucket name is not allowed"
-        return return_response(retdata)
-
-    current_app.logger.debug('hash: bucket: %s date: %s file %s' % (
-                 bucket, date, filename))
-    if request.headers.getlist("X-Forwarded-For"):
-        remote_addr = request.headers.getlist("X-Forwarded-For")[0]
-    else:
-        remote_addr = request.remote_addr
-
-    current_app.logger.debug('hash: remote ip: %s ' % remote_addr)
-
-    abspathfile = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
-                               bucket, date, filename)
-
-    current_app.logger.debug("hash: looking for file on disk: %s" % abspathfile)
-
-    if isfile(abspathfile):
-        current_app.logger.debug('getting hash of file at: %s' % abspathfile)
-        hash = calc_hash_from_file(abspathfile)
-
-        retdata['status_code'] = 200
-        retdata['message'] = "OK"
-        retdata['filename'] = filename
-        retdata['bucket'] = bucket
-        retdata['date'] = date
-        retdata['hash_remote'] = hash
-        return return_response(retdata)
-
-    else:
-        retdata['status_code'] = 500
-        retdata['message'] = "FAIL, no such file"
-        retdata['filename'] = filename
-        retdata['bucket'] = bucket
-        retdata['date'] = date
-        return return_response(retdata)
+    return respond('hash', 200, "OK", hash_remote=calc_hash_from_file(abspathfile), **file_info)
 
 
-@bp.route('/archive/delete/v1/<bucket>/<date>/<filename>')
-def delete(bucket="other", date=None, filename=None):
-    """## delete
-    delete must explicitly be allowed (default off) ,
-    takes three parameters in the rest api:
+@bp.route('/archive/delete/v1/<bucket>/<date>/<filename>', methods=['DELETE'])
+@handle_request_errors
+def delete(bucket, date, filename):
+    """## delete `DELETE /archive/delete/v1/<bucket>/<date>/<uuid>`
 
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-    * filename is the uuid(4) received by the server when storing files
+    must be enabled on the server with ARCHIVE_ALLOW_REMOVE=true (default off)
 
-    returns DELOK or DELFAIL and a string describing the file
+    * bucket - where the file was stored
+    * date - when the file was stored, YYYY-MM-DD
+    * uuid - returned by store
+
+    returns 200 with the sha256 (hash_remote) of the deleted file, 403 if delete
+    is not enabled, 404 if there is no such file.
     """
-    current_app.logger.debug("delete method called")
+    file_info = {'filename': filename, 'bucket': bucket, 'date': date}
+    check_bucket('delete', bucket)
 
-    retdata = {}
-    retdata['module'] = 'delete'
+    if not to_bool(current_app.config['ARCHIVE_ALLOW_REMOVE']):
+        return respond('delete', 403, "FAIL: delete not allowed", **file_info)
 
-    if bucket is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Bucket is required"
-        return return_response(retdata)
+    abspathfile = client_path('delete', bucket, date, filename)
 
-    if date is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Date is required"
-        return return_response(retdata)
+    if not os.path.exists(abspathfile):
+        return respond('delete', 404, "File not found", **file_info)
 
-    if filename is None:
-        retdata['status_code'] = 500
-        retdata['message'] = "Filename is required"
-        return return_response(retdata)
-
-    if bucket not in current_app.config['ARCHIVE_BUCKETS']:
-        retdata['status_code'] = 403
-        retdata['message'] = "Bucket name is not allowed"
-        return return_response(retdata)
-
-    if current_app.config['ARCHIVE_ALLOW_REMOVE'] == 0:
-        retdata['status_code'] = 403
-        retdata['message'] = "FAIL: delete not allowed"
-        retdata['filename'] = filename
-        retdata['bucket'] = bucket
-        retdata['date'] = date
-        return return_response(retdata)
-
-    current_app.logger.debug('delete: bucket: %s date: %s file %s' % (
-        bucket, date, filename))
-    if request.headers.getlist("X-Forwarded-For"):
-        remote_addr = request.headers.getlist("X-Forwarded-For")[0]
-    else:
-        remote_addr = request.remote_addr
-    current_app.logger.debug('delete: remote ip: %s ' % remote_addr)
-
-    abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
-                            bucket, date, filename)
-    current_app.logger.debug('deleteing file at: %s' % abs_path)
-
-    if not os.path.exists(abs_path):
-        retdata['status_code'] = 403
-        retdata['filename'] = filename
-        retdata['bucket'] = bucket
-        retdata['date'] = date
-        retdata['message'] = "Filename does not exist"
-        return return_response(retdata)
-
-    hash = calc_hash_from_file(abs_path)
-    os.remove(abs_path)
-    retdata['status_code'] = 200
-    retdata['filename'] = filename
-    retdata['bucket'] = bucket
-    retdata['date'] = date
-    retdata['message'] = "OK, delete done"
-    retdata['hash_remote'] = hash
-    return return_response(retdata)
+    file_hash = calc_hash_from_file(abspathfile)
+    os.remove(abspathfile)
+    current_app.logger.info("delete: deleted file: %s" % abspathfile)
+    return respond('delete', 200, "OK, delete done", hash_remote=file_hash, **file_info)
 
 
 @bp.route('/archive/list/v1/<bucket>/<date>/')
 @bp.route('/archive/list/v1/<bucket>/')
 @bp.route('/archive/list/v1/')
-def list(bucket=None, date=None):
-    """## list
+@handle_request_errors
+def list_files(bucket=None, date=None):
+    """## list `GET /archive/list/v1/[<bucket>/[<date>/]]`
 
-    * if called with /<bucket>/<date>/ the available uuid:s is listed
-    * if called with /<bucket>/ the available dates:s is listed
-    * if called with / the available buckets:s is listed
+    * `/archive/list/v1/` - the buckets the client has stored files in
+    * `/archive/list/v1/<bucket>/` - the dates in a bucket
+    * `/archive/list/v1/<bucket>/<date>/` - the uuids stored on a date
 
-    * bucket where the file was stored (one of the allowed bucket names)
-    * date when the file was stored (has to be formated YYYY-MM-DD)
-
-    returns json string with findings
+    returns 200 with a json list, an empty list if nothing is stored.
     """
-    current_app.logger.debug("list method called")
+    abs_path = client_path('list', bucket, date)
 
-    if request.headers.getlist("X-Forwarded-For"):
-        remote_addr = request.headers.getlist("X-Forwarded-For")[0]
-    else:
-        remote_addr = request.remote_addr
-    current_app.logger.debug('list: remote ip: %s ' % remote_addr)
+    if not isdir(abs_path):
+        current_app.logger.info('list: nothing stored at %s' % abs_path)
+        return jsonify([])
 
-    retdata = {}
-    retdata['module'] = 'list'
-
-    if bucket and date:
-        abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
-                                bucket, date)
-        retdata['date'] = date
-
-    elif bucket:
-        abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr,
-                                bucket)
-        retdata['bucket'] = bucket
-
-    else:
-        abs_path = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], remote_addr)
-
-    if isdir(abs_path) is False:
-        retdata['status_code'] = 500
-        retdata['message'] = "No files found"
-        retdata['bucket'] = bucket
-        retdata['date'] = date
-        retdata['reason'] = "not allowed"
-        return return_response(retdata)
-
-    else:
-        onlyfiles = listdir(abs_path)
-        response = jsonify(onlyfiles)
-        retdata['message'] = "listing files at {}".format(abs_path)
-        retdata['status_code'] = 200
-        current_app.logger.info(json.dumps(retdata))
-        response.status_code = retdata['status_code']
-        return response
+    current_app.logger.info('list: listing files at %s' % abs_path)
+    return jsonify(listdir(abs_path))
 
 
 @bp.route('/archive/health/v1/<verbose>/', methods=['GET'])
 @bp.route('/archive/health/v1/', methods=['GET'])
 def health(verbose=None):
-    """## health
+    """## health `GET /archive/health/v1/`
 
-        takes one optional parameter in the rest api
+    only allowed from the ips in ARCHIVE_IPS_HEALTH, checks that a file can
+    be written to the archive.
 
-        * verbose - returns more information about health status
-
-        returns 200 ALLOK: date: <date> if all health checks is ok
-        returns 403 ERROR date: <date> notallowed if ip not in
-             ARCHIVE_IPS_HEALTH
-        returns 500 ERROR date: <date>: <description of error> if some error
-        is found
+    returns 200 with message ALLOK if healthy, 403 if the client is not
+    allowed, 503 with message ERROR and the reason if the check fails.
     """
-    current_app.logger.debug("health method called")
+    remote_addr = get_remote_addr()
+    if remote_addr is None:
+        return respond('health', 400, "Invalid client address")
+    date = now().strftime("%Y-%m-%d %H:%M:%S")
 
-    retdata = {}
-    retdata['module'] = 'health'
+    if remote_addr not in current_app.config['ARCHIVE_IPS_HEALTH']:
+        return respond('health', 403, "ERROR", date=date, reason="not allowed")
 
-    if request.headers.getlist("X-Forwarded-For"):
-        remote_addr = request.headers.getlist("X-Forwarded-For")[0]
-    else:
-        remote_addr = request.remote_addr
-    current_app.logger.debug('health: remote ip: %s ' % remote_addr)
-    date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    upload_dir = current_app.config['ARCHIVE_UPLOAD_DIR']
+    if not os.path.exists(upload_dir):
+        return respond('health', 503, "ERROR", date=date, reason="upload dir does not exist")
 
-    if remote_addr in current_app.config['ARCHIVE_IPS_HEALTH']:
-        current_app.logger.debug('health: ip allowed to probe health: %s' % remote_addr)
-    else:
-        retdata['status_code'] = 403
-        retdata['message'] = "ERROR"
-        retdata['date'] = date
-        retdata['reason'] = "not allowed"
-        return return_response(retdata)
+    # create a new file like store does, removed again when closed
+    try:
+        with tempfile.NamedTemporaryFile(dir=upload_dir, prefix=".health-") as fh:
+            fh.write(("ALLOK: date: " + date).encode())
+    except OSError as e:
+        current_app.logger.error("health: can not write to %s: %s" % (upload_dir, e))
+        return respond('health', 503, "ERROR", date=date, reason="can not write to the archive")
 
-    filename = "health.check"
-    abspathfile = os.path.join(current_app.config['ARCHIVE_UPLOAD_DIR'], filename)
-
-    current_app.logger.debug("health: writing testfile on disk at: %s" % abspathfile)
-
-    if not os.path.exists(current_app.config['ARCHIVE_UPLOAD_DIR']):
-        retdata['status_code'] = 500
-        retdata['message'] = "ERROR"
-        retdata['date'] = date
-        retdata['reason'] = "upload dir does not exist"
-        return return_response(retdata)
-
-    with open(abspathfile, 'w') as fh:
-        try:
-            msg = "ALLOK: date: " + date
-            fh.write(msg)
-            fh.close()
-            retdata['status_code'] = 200
-            retdata['message'] = "ALLOK"
-            retdata['date'] = date
-            retdata['tests'] = "wrote test file to archive"
-            return return_response(retdata)
-
-        except IOError:
-            retdata['status_code'] = 500
-            retdata['message'] = "ERROR"
-            retdata['date'] = date
-            retdata['tests'] = "Failed to write test file to archive"
-            return return_response(retdata)
+    return respond('health', 200, "ALLOK", date=date, tests="wrote test file to archive")
