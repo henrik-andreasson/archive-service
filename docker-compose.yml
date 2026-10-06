@@ -1,0 +1,38 @@
+# Create the host dirs first as the user that will own them, if docker
+# creates them they are owned by root and the service can't write to them:
+#   mkdir -p archive-data logs
+#   ARCHIVE_UID=$(id -u) docker compose up -d --build
+services:
+  archive-service:
+    build:
+      context: .
+      args:
+        ARCHIVE_UID: ${ARCHIVE_UID:-1000}
+    ports:
+      - "8080:8080"
+    environment:
+      # on|off - require client certificates, default on when TLS is enabled
+      ARCHIVE_CLIENT_CERT: ${ARCHIVE_CLIENT_CERT:-}
+      CERT: ${CERT:-}
+      KEY: ${KEY:-}
+      CA: ${CA:-}
+      # number of trusted reverse proxies, 0 = clients connect directly
+      ARCHIVE_PROXY_COUNT: ${ARCHIVE_PROXY_COUNT:-0}
+      # true to allow clients to delete files (HTTP DELETE), default off
+      ARCHIVE_ALLOW_REMOVE: ${ARCHIVE_ALLOW_REMOVE:-false}
+      # allowed buckets, comma separated
+      ARCHIVE_BUCKETS: ${ARCHIVE_BUCKETS:-cert,other,log,config,admin,backups}
+      # time zone for the date dirs
+      ARCHIVE_TZ: ${ARCHIVE_TZ:-Europe/Stockholm}
+      ARCHIVE_DEBUG: ${ARCHIVE_DEBUG:-false}
+      # largest upload in MB, 0 = no limit
+      ARCHIVE_MAX_UPLOAD_MB: ${ARCHIVE_MAX_UPLOAD_MB:-1024}
+    volumes:
+      # archived files are stored on the host in ./archive-data
+      - type: bind
+        source: ./archive-data
+        target: /data
+      - type: bind
+        source: ./logs
+        target: /logs
+    restart: unless-stopped
