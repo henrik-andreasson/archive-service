@@ -1,43 +1,64 @@
 Archive Service
 ================
 
-Inspired by S3, but focus is to have a simple front-end for uploading files
-to be able to delete them locally.
+Inspired by S3, but with the focus on a simple way to upload files to an
+archive, so they can be deleted locally.
 
-Each ip accessing the archive has it's own part of the archive eg:
+* store a file and get back a uuid and the sha256 of the stored file, the
+  client checks the hash and can delete the local copy
+* each client (ip address) has its own part of the archive, files are stored
+  as `<client ip>/<bucket>/<date>/<uuid>`
+* TLS with client certificates, runs in Docker or directly with gunicorn
+* the client can store on several servers, clustered or standalone
 
-```
-archive/1.2.3.4
-```
+# Quick start
 
-and
-
-```
-archive/3.3.3.3
-```
-
-When uploading files the client must choose one `bucket` to store the file in.
-Currently the default buckets is:
+Start the server with docker compose, files are stored in `./archive-data`:
 
 ```
-cert, backup, logs, other
+mkdir -p archive-data logs
+ARCHIVE_UID=$(id -u) docker compose up -d --build
 ```
 
-when a file is uploaded the archive server automatically creates a date subdir
-below the ip dir eg:
-
+Or without Docker:
 
 ```
-archive/3.3.3.3/other/2019-08-06/
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+mkdir -p archive-data logs
+PATH="$PWD/.venv/bin:$PATH" ARCHIVE_UPLOAD_DIR="$PWD/archive-data" ARCHIVE_LOG_DIR="$PWD/logs" \
+  ./gunicorn-start.sh
 ```
 
-When a file is uploaded the server returns a UUID (4) this is the reference to
-the file at the archive eg:
+Store a file and get it back with the client:
 
 ```
-archive/3.3.3.3/other/2019-08-06/f71f4bd0-22de-474e-8554-81f381e766ed
+pip install -r requirements-cli.txt
+export ARCHIVE_URL=http://localhost:8080
+
+bin/archive-cli.py store README.md -b cert
+bin/archive-cli.py get <uuid> -b cert -t <date> -o README-back.md
 ```
+
+This runs plain HTTP, for production use TLS with client certificates.
 
 # Docs
 
-[docs](https://github.com/henrik-andreasson/archive-service/tree/master/docs)
+* [Overview](docs/index.md) - how files are stored
+* [Run the server](docs/run-server.md) and [Docker](docs/docker.md)
+* [Configuration](docs/configuration.md) - all settings
+* [TLS and client certificates](docs/tls.md)
+* [Client](docs/client.md)
+* [API](docs/api-doc.md)
+* [Development](docs/development.md) - tests and building these docs
+
+The docs can also be built as a website with Material for MkDocs, see
+[Development](docs/development.md#documentation).
+
+# Tests
+
+```
+./run-tests.sh                        # all tests, creates .venv on the first run
+./run-tests.sh -m "not integration"   # only the fast tests, no real servers
+```
+
+The tests also run on GitHub Actions on every push (`.github/workflows/tests.yml`).

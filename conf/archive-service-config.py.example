@@ -1,0 +1,18 @@
+# Example config file, copy to conf/archive-service-config.py or point
+# ARCHIVE_CONFIG at your own file. Settings here override the environment,
+# leave out (or comment) anything you want to keep from the defaults/env.
+# See README.md for all settings.
+
+# ARCHIVE_TZ = "Europe/Stockholm"
+# ARCHIVE_UPLOAD_DIR = "/var/lib/archive-service"
+# ARCHIVE_BUCKETS = ["cert", "other", "log", "config", "admin", "backups"]
+# ARCHIVE_IPS_HEALTH = ["127.0.0.1"]
+# ARCHIVE_ALLOW_REMOVE = False
+# ARCHIVE_DEBUG = False
+# ARCHIVE_MAX_UPLOAD_MB = 1024
+# ARCHIVE_LOG_DIR = "/var/log/archive-service"
+# ARCHIVE_LOG_FILE = "archive-service.log"
+# ARCHIVE_LOG_MAX_MB = 10
+# ARCHIVE_LOG_BACKUPS = 10
+# ARCHIVE_LOG_STDERR = False
+# ARCHIVE_PROXY_COUNT = 0

@@ -1,22 +1,32 @@
-# Use an official Python runtime as a parent image
-FROM centos:latest
+FROM python:3.13-slim
 
-# Set the working directory to /app
+# uid of the service user, match it to the owner of the bind-mounted data dir
+ARG ARCHIVE_UID=1000
+
 WORKDIR /archive-service
 
-COPY . /archive-service
+# Install dependencies first so they are cached between code changes
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install any needed packages
-RUN yum install -y python3 sqlite
+COPY app/ app/
+COPY conf/defaultserviceconfig.py conf/
+COPY archive-service.py gunicorn-start.sh ./
 
-RUN pip3 install  flask-login  \
-  flask-bootstrap flask-httpauth  gunicorn
+# /data is where archived files are stored, bind mount it from the host
+RUN useradd -r -m -u "${ARCHIVE_UID}" archive \
+ && mkdir -p /data /logs \
+ && chown archive /archive-service /data /logs
+USER archive
 
-# Make port available to the world outside this container
-EXPOSE 5002
+ENV PYTHONUNBUFFERED=1 \
+    ARCHIVE_LOG_STDERR=true \
+    ARCHIVE_UPLOAD_DIR=/data \
+    ARCHIVE_LOG_DIR=/logs \
+    PORT=8080 \
+    FLASK_APP=/archive-service/archive-service.py
 
-ENV FLASK_APP=/archive-service/archive-service.py
+VOLUME ["/data", "/logs"]
+EXPOSE 8080
 
-
-# Run flask when the container launches
-CMD [ "/archive-service/gunicorn-start.sh"]
+CMD ["/archive-service/gunicorn-start.sh"]
