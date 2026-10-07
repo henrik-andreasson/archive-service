@@ -1,0 +1,78 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t archive-service --build-arg ARCHIVE_UID=$(id -u) .
+
+      - name: Start container
+        run: |
+          mkdir -p archive-data logs
+          docker run -d --name archive-service -p 8080:8080 \
+            --mount type=bind,source="$PWD/archive-data",target=/data \
+            --mount type=bind,source="$PWD/logs",target=/logs \
+            archive-service
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/ && break; sleep 1; done
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Store and get a file with the client
+        run: |
+          pip install -r requirements-cli.txt
+          export ARCHIVE_URL=http://localhost:8080
+          OUT=$(python bin/archive-cli.py store README.md -b cert)
+          echo "$OUT"
+          UUID=$(echo "$OUT" | sed 's/.*uuid:\([^;]*\).*/\1/')
+          DATE=$(echo "$OUT" | sed 's/.*date:\([^;]*\).*/\1/')
+          python bin/archive-cli.py get "$UUID" -b cert -t "$DATE" -o /tmp/readme-back.md
+          cmp README.md /tmp/readme-back.md
+          test -n "$(find archive-data -type f)"
+
+      - name: Container logs
+        if: always()
+        run: docker logs archive-service
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build docs
+        run: |
+          pip install -r requirements-docs.txt
+          mkdocs build --strict
