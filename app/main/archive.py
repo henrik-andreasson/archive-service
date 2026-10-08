@@ -312,7 +312,8 @@ def get(bucket, date, filename):
     * date - when the file was stored, YYYY-MM-DD
     * uuid - returned by store
 
-    returns 200 with the file, 404 if there is no such file.
+    returns 200 with the file, as a download with the original file name if it
+    is known, 404 if there is no such file.
     """
     abspathfile = client_path('get', bucket, date, filename)
 
@@ -320,7 +321,10 @@ def get(bucket, date, filename):
         return respond('get', 404, "File not found", filename=filename, bucket=bucket, date=date)
 
     current_app.logger.info("get: serving file: %s" % abspathfile)
-    return send_from_directory(os.path.dirname(abspathfile), filename, as_attachment=True)
+    # download under the original name if it is known
+    metadata = read_metadata(abspathfile) or {}
+    return send_from_directory(os.path.dirname(abspathfile), filename, as_attachment=True,
+                               download_name=metadata.get('name') or filename)
 
 
 @bp.route('/archive/hash/v1/<bucket>/<date>/<filename>', methods=['GET'])

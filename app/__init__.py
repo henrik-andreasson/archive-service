@@ -7,7 +7,8 @@ from app.log.log import create_logger
 
 
 def create_app(config_class=Config):
-    app = Flask(__name__)
+    # no automatic /static/, the web front-end is only served at /ui/ when enabled
+    app = Flask(__name__, static_folder=None)
 
     print("loading config from defaults and environment (conf/defaultserviceconfig.py)", file=sys.stderr)
     app.config.from_object(config_class)

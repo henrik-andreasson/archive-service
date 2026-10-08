@@ -408,9 +408,9 @@ Steps:
    - `GET /archive/info/v1`: buckets, whether delete is enabled, upload limit, the client address.
    - Cross-site protection: requests that change data are refused if the browser's `Origin` header names another site (curl and the CLI send no `Origin`).
    - Security headers on all responses: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
-2. **The page**, behind `ARCHIVE_UI` (default off).
+2. ✅ **The page**, behind `ARCHIVE_UI` (default off): **done**
 3. **Tests and docs**: `/ui/` served only when enabled, a "Web UI" docs page including how to import a client cert (`.p12`) into a browser.
-4. **Cleanup**: remove the unused `app/static/loading.gif`.
+4. ✅ **Cleanup**: remove the unused `app/static/loading.gif`: **done** (with step 2)
 
 **Step 1 status:** done.
 - `store` writes `<uuid>.json` (uuid, original name without directories, max 255 characters, size, sha256, time stored in `ARCHIVE_TZ`, bucket, date) and returns `name` and `size` as well. `delete` removes the metadata. `list` on a date shows only the uuids, so the CLI output is unchanged.
@@ -420,3 +420,16 @@ Steps:
 - Security headers on every response, including errors and downloads: `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`.
 - `docs/api-doc.md` is regenerated (new `info` section, details, cross-site 403) and `docs/index.md` mentions the metadata.
 - Tests: `tests/test_metadata.py` and `tests/test_info_and_browser.py`, 25 new; all 198 pass. Werkzeug already drops backslashes from uploaded file names, so Windows paths can't add directories either.
+
+**Step 2 status:** done.
+- `app/static/ui/`: `index.html`, `app.js` (~280 lines, plain JavaScript), `app.css` (light/dark), `favicon.svg`. No inline scripts or styles, so it works under the strict Content-Security-Policy. All text is set with `textContent`, so file names can't inject HTML.
+- `app/main/ui.py` serves it at `/ui/` only when `ARCHIVE_UI=true`, otherwise 404. Flask's automatic `/static/` is turned off, which also stops the old `loading.gif` being public; the gif is removed (step 4).
+- `get` now downloads under the original file name (from the metadata), or the uuid for older files.
+- `ARCHIVE_UI` is in the config, `docs/configuration.md`, the example config and `docker-compose.yml`.
+- Tests (`tests/test_ui.py`): off by default (including `/static/`), page and assets served with the right types and CSP when on, no path traversal, no inline script/style/event handlers, no `innerHTML` in the script, download names, setting parsed. All 216 pass.
+- Checked in real headless Chromium over the DevTools protocol, page on `localhost` (secure context):
+  - The listing shows CLI-stored files with names, sizes and times.
+  - A browser upload gives "stored, sha256 matches" and appears in the list.
+  - A file named `<img src=x onerror=alert(1)>.txt` is shown as text.
+  - No console errors or CSP violations, after adding a favicon (the browser's automatic `/favicon.ico` request gave a 404).
+- Found while testing: `archive.pid` in the repo pointed at a running process (PID 420719, gone a moment later, possibly a server started from the README steps), so a second server from the same directory refused to start ("Already running on PID …"). That is gunicorn protecting a running server, as intended. Test servers now run from a temp copy so they never share the pid file.

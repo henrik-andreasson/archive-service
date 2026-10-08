@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Archive Service</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>Archive Service</h1>
+    <span id="client" class="muted"></span>
+  </header>
+
+  <p id="notice" class="notice" hidden></p>
+
+  <main>
+    <section>
+      <h2>Upload</h2>
+      <div class="row">
+        <label>Bucket <select id="upload-bucket"></select></label>
+        <span id="limit" class="muted"></span>
+      </div>
+      <label id="drop" class="drop">
+        <input type="file" id="files" multiple>
+        <span>Drop files here or click to choose</span>
+      </label>
+      <table id="uploads" class="files" hidden>
+        <thead>
+          <tr><th>File</th><th>Status</th><th>uuid</th><th>Date</th><th>sha256</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>My files</h2>
+      <div class="row">
+        <label>Bucket <select id="browse-bucket"></select></label>
+        <label>Date <select id="browse-date"></select></label>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <p id="browse-empty" class="muted">No files stored in this bucket.</p>
+      <table id="browse" class="files" hidden>
+        <thead>
+          <tr><th>Name</th><th>Size</th><th>Stored</th><th>uuid</th><th>sha256</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="muted">
+    Files are stored per client address. The sha256 of an upload is checked in
+    the browser when the page is served over HTTPS.
+  </footer>
+</body>
+</html>

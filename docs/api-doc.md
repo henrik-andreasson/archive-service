@@ -45,7 +45,8 @@ size of the stored file, the uuid and date are needed to get the file back.
 * date - when the file was stored, YYYY-MM-DD
 * uuid - returned by store
 
-returns 200 with the file, 404 if there is no such file.
+returns 200 with the file, as a download with the original file name if it
+is known, 404 if there is no such file.
 
 ## hash `GET /archive/hash/v1/<bucket>/<date>/<uuid>`
 
