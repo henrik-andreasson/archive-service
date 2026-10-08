@@ -30,6 +30,7 @@ nav:
       - Configuration: configuration.md
       - TLS and client certificates: tls.md
   - Client: client.md
+  - Web UI: web-ui.md
   - API: api-doc.md
   - Development: development.md
 

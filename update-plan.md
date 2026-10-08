@@ -386,3 +386,64 @@ Small open items, and problems found while writing the test suite (§8).
   - Tested: for every refused configuration, no `.pem` file appears in the install dir and the `TLS_DIR` is not created.
 - **Docs:** `docs/run-server.md` (`TIMEOUT` and `TLS_DIR` in the settings table, new `INSTALL_PATH` default, large-upload note), `docs/tls.md` (where the cert files go) and the README quick start are updated. The `.gitignore` now ignores `/*.pem` in the repo root ("never commit keys"), plus `/archive.pid`.
 - All 171 tests pass (9 new for these fixes), and the docs build with `--strict`.
+
+
+## 11. Simple web front-end
+
+A small web UI for uploading and browsing your own files, served by the service at `/ui/`.
+
+**Decisions:** off by default (`ARCHIVE_UI=true` to turn it on); metadata stored in a JSON file next to each upload.
+
+Design:
+- One static HTML page with plain JavaScript in `app/static/`, calling the existing JSON API. No framework, no build step, no CDN (works offline, strict Content-Security-Policy).
+- Upload with drag and drop, bucket picker, progress bar (`XMLHttpRequest`) and a receipt (uuid, date, sha256, copy button).
+- sha256 checked in the browser with `crypto.subtle` (only on HTTPS or localhost; skipped for very large files, the page says so).
+- Browse bucket → date → files with name, size and time stored; get, hash, and delete when the server allows it.
+- Shows the client address the server sees (files are grouped per IP).
+
+Steps:
+1. ✅ **Server changes** (backwards-compatible), with tests: **done**
+   - Metadata: `store` writes `<uuid>.json` next to the file (original name, size, sha256, time stored); `delete` removes it; `list` hides it.
+   - `list` with `?details=1` on the date level returns objects with the metadata; the plain list is unchanged for the CLI.
+   - `GET /archive/info/v1`: buckets, whether delete is enabled, upload limit, the client address.
+   - Cross-site protection: requests that change data are refused if the browser's `Origin` header names another site (curl and the CLI send no `Origin`).
+   - Security headers on all responses: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
+2. ✅ **The page**, behind `ARCHIVE_UI` (default off): **done**
+3. ✅ **Tests and docs**: `/ui/` served only when enabled, a "Web UI" docs page including how to import a client cert (`.p12`) into a browser: **done**
+4. ✅ **Cleanup**: remove the unused `app/static/loading.gif`: **done** (with step 2)
+
+**Step 1 status:** done.
+- `store` writes `<uuid>.json` (uuid, original name without directories, max 255 characters, size, sha256, time stored in `ARCHIVE_TZ`, bucket, date) and returns `name` and `size` as well. `delete` removes the metadata. `list` on a date shows only the uuids, so the CLI output is unchanged.
+- `list ...?details=1` on a date returns `[{uuid, name, size, sha256, stored}]`. Files stored before this change get `null` for name, sha256 and stored.
+- `GET /archive/info/v1`: buckets, `allow_remove`, `max_upload_mb`, `client_address`.
+- Requests that change data (POST, DELETE) with an `Origin` header from another site → 403 "Cross-site request not allowed". The host is compared, not the scheme, so it also works behind a TLS proxy. GET is not affected.
+- Security headers on every response, including errors and downloads: `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`.
+- `docs/api-doc.md` is regenerated (new `info` section, details, cross-site 403) and `docs/index.md` mentions the metadata.
+- Tests: `tests/test_metadata.py` and `tests/test_info_and_browser.py`, 25 new; all 198 pass. Werkzeug already drops backslashes from uploaded file names, so Windows paths can't add directories either.
+
+**Step 2 status:** done.
+- `app/static/ui/`: `index.html`, `app.js` (~280 lines, plain JavaScript), `app.css` (light/dark), `favicon.svg`. No inline scripts or styles, so it works under the strict Content-Security-Policy. All text is set with `textContent`, so file names can't inject HTML.
+- `app/main/ui.py` serves it at `/ui/` only when `ARCHIVE_UI=true`, otherwise 404. Flask's automatic `/static/` is turned off, which also stops the old `loading.gif` being public; the gif is removed (step 4).
+- `get` now downloads under the original file name (from the metadata), or the uuid for older files.
+- `ARCHIVE_UI` is in the config, `docs/configuration.md`, the example config and `docker-compose.yml`.
+- Tests (`tests/test_ui.py`): off by default (including `/static/`), page and assets served with the right types and CSP when on, no path traversal, no inline script/style/event handlers, no `innerHTML` in the script, download names, setting parsed. All 216 pass.
+- Checked in real headless Chromium over the DevTools protocol, page on `localhost` (secure context):
+  - The listing shows CLI-stored files with names, sizes and times.
+  - A browser upload gives "stored, sha256 matches" and appears in the list.
+  - A file named `<img src=x onerror=alert(1)>.txt` is shown as text.
+  - No console errors or CSP violations, after adding a favicon (the browser's automatic `/favicon.ico` request gave a 404).
+- Found while testing: `archive.pid` in the repo pointed at a running process (PID 420719, gone a moment later, possibly a server started from the README steps), so a second server from the same directory refused to start ("Already running on PID …"). That is gunicorn protecting a running server, as intended. Test servers now run from a temp copy so they never share the pid file.
+
+**Step 3 status:** done. §11 is complete.
+- Browser test: `tests/test_ui_browser.py` runs `tests/ui_browser.mjs`, which drives headless Chrome/Chromium over the DevTools protocol (Node 22+, no npm packages) against a real gunicorn server. It checks:
+  - secure context, client address and buckets;
+  - a CLI-stored file named `<img src=x onerror=alert(1)>.txt` shown as text;
+  - a browser upload → "stored, sha256 matches" and it appears in the list;
+  - delete through the page, with the confirm dialog accepted, removes it;
+  - no console errors or CSP violations.
+
+  It is skipped without a browser or Node. Checked that it fails if file names are rendered as HTML. The workflow's pytest job installs Node 22 (Chrome is on the GitHub runner).
+- `docs/web-ui.md`, with a light-mode screenshot (`docs/img/web-ui.png`, taken by the test script): turning it on, what it does, the HTTPS requirement for the sha256 check, per-address storage, client certificates in the browser (making a `.p12`, importing in Firefox, Chrome on Linux, and the Windows/macOS system stores), and the security notes. Linked from mkdocs, the README, the overview and the TLS page.
+- `conf/test-certs/archive-client.test.gazonk.se.p12`: the test client cert, key and CA for a browser, password `archive-test`.
+- Not tested: importing the `.p12` into a real browser and using the page over TLS with a client certificate (headless Chrome can't pick a client certificate without extra policy setup).
+- All 217 tests pass; the docs build with `--strict`.

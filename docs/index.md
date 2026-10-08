@@ -10,6 +10,7 @@ archive, so they can be deleted locally.
 * TLS with client certificates, see [TLS](tls.md)
 * runs in Docker, see [Docker](docker.md), or directly with gunicorn, see
   [Run the server](run-server.md)
+* an optional [web UI](web-ui.md) to upload and browse files in the browser
 
 ## How files are stored
 
@@ -33,6 +34,10 @@ eg.
   `ARCHIVE_TZ` (default `Europe/Stockholm`)
 * **uuid** - returned when the file is stored, together with the bucket and
   date it is needed to get, hash or delete the file
+
+Next to each file the server keeps `<uuid>.json` with the original file name,
+size, sha256 and the time it was stored. `list` with `?details=1` returns this
+for the files on a date, see [API](api-doc.md).
 
 A client can only see and get its own files. Deleting files is off by default
 (`ARCHIVE_ALLOW_REMOVE`). See [Configuration](configuration.md) for all

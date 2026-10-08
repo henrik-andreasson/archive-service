@@ -11,6 +11,7 @@ import datetime
 from zoneinfo import ZoneInfo
 from os import listdir
 from os.path import isfile, isdir
+from urllib.parse import urlsplit
 import json
 from app.main import bp
 from flask import jsonify
@@ -60,6 +61,33 @@ def calc_hash_from_file(file):
     return sha256.hexdigest()
 
 
+def metadata_path(abspathfile):
+    """the metadata of a stored file is kept next to it in <uuid>.json"""
+    return abspathfile + ".json"
+
+
+def write_metadata(abspathfile, metadata):
+    tmp = metadata_path(abspathfile) + ".tmp"
+    with open(tmp, 'w') as f:
+        json.dump(metadata, f)
+    os.replace(tmp, metadata_path(abspathfile))
+
+
+def read_metadata(abspathfile):
+    """the metadata of a stored file, or None for files stored without it"""
+    try:
+        with open(metadata_path(abspathfile)) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def original_filename(file):
+    """the file name sent by the client, without any directories"""
+    name = (file.filename or "").replace("\\", "/")
+    return os.path.basename(name)[:255]
+
+
 API_RESPONSES_DOC = """## Responses
 
 All responses except a successful `get` (the file) and `list` (a json list)
@@ -72,7 +100,8 @@ Status codes used by all endpoints:
 * 200 ok
 * 400 bad request: missing or invalid parameter, invalid client address
 * 403 forbidden: bucket not allowed, delete not enabled, not allowed to
-  call health
+  call health, or a cross-site request from a browser (a request that
+  changes data with an `Origin` header from another site)
 * 404 not found: the file does not exist, or unknown url
 * 405 method not allowed
 * 413 the upload is larger than ARCHIVE_MAX_UPLOAD_MB
@@ -85,7 +114,7 @@ def apidoc():
     """print the api docs (markdown) from the endpoint docstrings"""
     print("# Archive service API\n")
     print(API_RESPONSES_DOC)
-    for view in (store, get, hash_file, list_files, delete, health):
+    for view in (info, store, get, hash_file, list_files, delete, health):
         print(inspect.getdoc(view) + "\n")
 
 
@@ -170,10 +199,59 @@ def internal_error(e):
     return respond('error', 500, "Internal server error")
 
 
+SECURITY_HEADERS = {
+    'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+}
+
+
+@bp.before_app_request
+def refuse_cross_site_requests():
+    """the client is identified by its address or client certificate, which a
+    browser sends to any site, so another web site could make the browser
+    store or delete files: refuse requests that change data if the browser
+    says they come from another site. curl and the client send no Origin."""
+    if request.method in ('GET', 'HEAD', 'OPTIONS'):
+        return None
+    origin = request.headers.get('Origin')
+    if origin is not None and urlsplit(origin).netloc != request.host:
+        current_app.logger.warning('refused cross-site %s from origin %s' % (request.method, origin))
+        return respond('error', 403, "Cross-site request not allowed")
+    return None
+
+
+@bp.after_app_request
+def add_security_headers(response):
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
+
 @bp.route('/', methods=['GET', 'POST'])
 def root():
     current_app.logger.info('service root accessed, noop')
     return respond('root', 200, "This is the archive service, please use the api docs or the client")
+
+
+@bp.route('/archive/info/v1', methods=['GET'])
+@handle_request_errors
+def info():
+    """## info `GET /archive/info/v1`
+
+    returns 200 with the settings a client needs: the allowed buckets, if
+    delete is enabled, the upload limit in MB (0 = no limit) and the client
+    address the server sees, files are stored per client address.
+    """
+    remote_addr = get_remote_addr()
+    if remote_addr is None:
+        return respond('info', 400, "Invalid client address")
+    return respond('info', 200, "OK",
+                   buckets=current_app.config['ARCHIVE_BUCKETS'],
+                   allow_remove=current_app.config['ARCHIVE_ALLOW_REMOVE'],
+                   max_upload_mb=current_app.config['ARCHIVE_MAX_UPLOAD_MB'],
+                   client_address=remote_addr)
 
 
 @bp.route('/archive/store/v1', methods=['POST'])
@@ -184,10 +262,11 @@ def store():
     takes two parameters in a multipart POST:
 
     * bucket - one of the allowed bucket names
-    * file - the file to archive, the filename is not used
+    * file - the file to archive, it is stored under a new uuid, the original
+      file name is kept in the metadata
 
-    returns 200 with the uuid, bucket, date and sha256 (server_hash) of the
-    stored file, the uuid and date are needed to get the file back.
+    returns 200 with the uuid, bucket, date, sha256 (server_hash), name and
+    size of the stored file, the uuid and date are needed to get the file back.
     400 if bucket or file is missing, 403 if the bucket is not allowed,
     413 if the file is larger than ARCHIVE_MAX_UPLOAD_MB.
     """
@@ -208,8 +287,20 @@ def store():
     file.save(abspathfile)
     current_app.logger.info('store: file stored at: %s' % abspathfile)
 
+    metadata = {
+        'uuid': file_uuid,
+        'name': original_filename(file),
+        'size': os.path.getsize(abspathfile),
+        'sha256': calc_hash_from_file(abspathfile),
+        'stored': now().isoformat(timespec='seconds'),
+        'bucket': bucket,
+        'date': date_path,
+    }
+    write_metadata(abspathfile, metadata)
+
     return respond('store', 200, "OK", filename=file_uuid, bucket=bucket, date=date_path,
-                   server_hash=calc_hash_from_file(abspathfile), uuid=file_uuid)
+                   server_hash=metadata['sha256'], uuid=file_uuid,
+                   name=metadata['name'], size=metadata['size'])
 
 
 @bp.route('/archive/get/v1/<bucket>/<date>/<filename>', methods=['GET'])
@@ -221,7 +312,8 @@ def get(bucket, date, filename):
     * date - when the file was stored, YYYY-MM-DD
     * uuid - returned by store
 
-    returns 200 with the file, 404 if there is no such file.
+    returns 200 with the file, as a download with the original file name if it
+    is known, 404 if there is no such file.
     """
     abspathfile = client_path('get', bucket, date, filename)
 
@@ -229,7 +321,10 @@ def get(bucket, date, filename):
         return respond('get', 404, "File not found", filename=filename, bucket=bucket, date=date)
 
     current_app.logger.info("get: serving file: %s" % abspathfile)
-    return send_from_directory(os.path.dirname(abspathfile), filename, as_attachment=True)
+    # download under the original name if it is known
+    metadata = read_metadata(abspathfile) or {}
+    return send_from_directory(os.path.dirname(abspathfile), filename, as_attachment=True,
+                               download_name=metadata.get('name') or filename)
 
 
 @bp.route('/archive/hash/v1/<bucket>/<date>/<filename>', methods=['GET'])
@@ -280,6 +375,8 @@ def delete(bucket, date, filename):
 
     file_hash = calc_hash_from_file(abspathfile)
     os.remove(abspathfile)
+    if os.path.exists(metadata_path(abspathfile)):
+        os.remove(metadata_path(abspathfile))
     current_app.logger.info("delete: deleted file: %s" % abspathfile)
     return respond('delete', 200, "OK, delete done", hash_remote=file_hash, **file_info)
 
@@ -294,6 +391,9 @@ def list_files(bucket=None, date=None):
     * `/archive/list/v1/` - the buckets the client has stored files in
     * `/archive/list/v1/<bucket>/` - the dates in a bucket
     * `/archive/list/v1/<bucket>/<date>/` - the uuids stored on a date
+    * `/archive/list/v1/<bucket>/<date>/?details=1` - the files stored on a
+      date as objects with uuid, name, size, sha256 and stored (time), name,
+      sha256 and stored are null for files stored before metadata was kept
 
     returns 200 with a json list, an empty list if nothing is stored.
     """
@@ -304,7 +404,27 @@ def list_files(bucket=None, date=None):
         return jsonify([])
 
     current_app.logger.info('list: listing files at %s' % abs_path)
-    return jsonify(listdir(abs_path))
+    names = sorted(listdir(abs_path))
+    if date is None:
+        return jsonify(names)
+
+    # a date dir has the files (uuids) and their metadata files
+    uuids = [name for name in names if check_path_args(filename=name) is None]
+    if not to_bool(request.args.get('details', 'false')):
+        return jsonify(uuids)
+
+    files = []
+    for file_uuid in uuids:
+        abspathfile = os.path.join(abs_path, file_uuid)
+        metadata = read_metadata(abspathfile) or {}
+        files.append({
+            'uuid': file_uuid,
+            'name': metadata.get('name'),
+            'size': os.path.getsize(abspathfile),
+            'sha256': metadata.get('sha256'),
+            'stored': metadata.get('stored'),
+        })
+    return jsonify(files)
 
 
 @bp.route('/archive/health/v1/<verbose>/', methods=['GET'])

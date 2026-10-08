@@ -25,6 +25,8 @@ services:
       # time zone for the date dirs
       ARCHIVE_TZ: ${ARCHIVE_TZ:-Europe/Stockholm}
       ARCHIVE_DEBUG: ${ARCHIVE_DEBUG:-false}
+      # web front-end at /ui/
+      ARCHIVE_UI: ${ARCHIVE_UI:-false}
       # largest upload in MB, 0 = no limit
       ARCHIVE_MAX_UPLOAD_MB: ${ARCHIVE_MAX_UPLOAD_MB:-1024}
     volumes:

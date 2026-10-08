@@ -12,22 +12,30 @@ Status codes used by all endpoints:
 * 200 ok
 * 400 bad request: missing or invalid parameter, invalid client address
 * 403 forbidden: bucket not allowed, delete not enabled, not allowed to
-  call health
+  call health, or a cross-site request from a browser (a request that
+  changes data with an `Origin` header from another site)
 * 404 not found: the file does not exist, or unknown url
 * 405 method not allowed
 * 413 the upload is larger than ARCHIVE_MAX_UPLOAD_MB
 * 500 internal server error
 * 503 health check failed
 
+## info `GET /archive/info/v1`
+
+returns 200 with the settings a client needs: the allowed buckets, if
+delete is enabled, the upload limit in MB (0 = no limit) and the client
+address the server sees, files are stored per client address.
+
 ## store `POST /archive/store/v1`
 
 takes two parameters in a multipart POST:
 
 * bucket - one of the allowed bucket names
-* file - the file to archive, the filename is not used
+* file - the file to archive, it is stored under a new uuid, the original
+  file name is kept in the metadata
 
-returns 200 with the uuid, bucket, date and sha256 (server_hash) of the
-stored file, the uuid and date are needed to get the file back.
+returns 200 with the uuid, bucket, date, sha256 (server_hash), name and
+size of the stored file, the uuid and date are needed to get the file back.
 400 if bucket or file is missing, 403 if the bucket is not allowed,
 413 if the file is larger than ARCHIVE_MAX_UPLOAD_MB.
 
@@ -37,7 +45,8 @@ stored file, the uuid and date are needed to get the file back.
 * date - when the file was stored, YYYY-MM-DD
 * uuid - returned by store
 
-returns 200 with the file, 404 if there is no such file.
+returns 200 with the file, as a download with the original file name if it
+is known, 404 if there is no such file.
 
 ## hash `GET /archive/hash/v1/<bucket>/<date>/<uuid>`
 
@@ -53,6 +62,9 @@ such file.
 * `/archive/list/v1/` - the buckets the client has stored files in
 * `/archive/list/v1/<bucket>/` - the dates in a bucket
 * `/archive/list/v1/<bucket>/<date>/` - the uuids stored on a date
+* `/archive/list/v1/<bucket>/<date>/?details=1` - the files stored on a
+  date as objects with uuid, name, size, sha256 and stored (time), name,
+  sha256 and stored are null for files stored before metadata was kept
 
 returns 200 with a json list, an empty list if nothing is stored.
 

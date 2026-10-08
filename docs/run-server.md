@@ -15,12 +15,12 @@ python3 -m venv .venv
 ## Start
 
 `gunicorn-start.sh` starts gunicorn on port 8080, with TLS if `CERT` and `KEY`
-are set (see [TLS](tls.md)). Put the virtualenv on the `PATH`:
+are set (see [TLS](tls.md)). It uses gunicorn from `.venv` in the service
+directory, or from the `PATH` if there is no `.venv`:
 
 ```
 mkdir -p archive-data logs
 
-export PATH="$PWD/.venv/bin:$PATH"
 export ARCHIVE_UPLOAD_DIR="$PWD/archive-data"
 export ARCHIVE_LOG_DIR="$PWD/logs"
 
@@ -41,7 +41,7 @@ directory in `/dev/shm`, which is in memory, see [TLS](tls.md).
 
 | Variable | Default | Description |
 |---|---|---|
-| `INSTALL_PATH` | the directory of `gunicorn-start.sh` | directory of the service |
+| `INSTALL_PATH` | the directory of `gunicorn-start.sh` | directory of the service, gunicorn from `INSTALL_PATH/.venv` is used if it exists |
 | `PORT` | `8080` | port to listen on |
 | `TIMEOUT` | `300` | gunicorn worker timeout in seconds, large uploads on slow connections need time |
 | `CERT`, `KEY` | - | server cert and key (PEM), both enable TLS |

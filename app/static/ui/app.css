@@ -1,0 +1,121 @@
+:root {
+  --bg: #fff;
+  --fg: #1d1d1f;
+  --muted: #6b6b70;
+  --line: #d9d9de;
+  --accent: #2f6fde;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --error: #c62828;
+  --drop: #f4f6fb;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181b;
+    --fg: #e7e7ea;
+    --muted: #9b9ba3;
+    --line: #34353a;
+    --accent: #7aa7ff;
+    --ok: #5cc27a;
+    --warn: #e0b24a;
+    --error: #ff7b72;
+    --drop: #202227;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: 1rem 1.5rem 2rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+
+h1 { font-size: 1.4rem; margin: 0.5rem 0; }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 0.85em; }
+.ok { color: var(--ok); }
+.warn { color: var(--warn); }
+.error { color: var(--error); }
+
+.notice {
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+select, button {
+  font: inherit;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.small { font-size: 0.85em; padding: 0.1rem 0.4rem; }
+button.danger:hover { border-color: var(--error); color: var(--error); }
+
+.drop {
+  display: block;
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  background: var(--drop);
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.drop.over { border-color: var(--accent); color: var(--accent); }
+.drop input { display: none; }
+
+table.files {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+table.files th, table.files td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+table.files th { font-weight: 600; color: var(--muted); font-size: 0.9em; }
+table.files td.actions { white-space: nowrap; text-align: right; }
+table.files td.actions > * { margin-left: 0.25rem; }
+
+a { color: var(--accent); }
+
+progress { width: 8rem; }
+
+footer { margin-top: 2rem; font-size: 0.9em; }

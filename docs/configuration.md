@@ -22,6 +22,7 @@ startup with an error.
 | `ARCHIVE_IPS_HEALTH` | `127.0.0.1,127.0.0.2` | ips allowed to call the health check |
 | `ARCHIVE_TZ` | `Europe/Stockholm` | time zone for the date dirs and health timestamps |
 | `ARCHIVE_PROXY_COUNT` | `0` | number of trusted reverse proxies, see [below](#client-address-and-reverse-proxies) |
+| `ARCHIVE_UI` | `false` | serve the web front-end at `/ui/` |
 | `ARCHIVE_MAX_UPLOAD_MB` | `1024` | largest upload in MB, larger uploads get 413, `0` = no limit |
 | `ARCHIVE_LOG_DIR` | `/tmp` (`/logs` in docker) | log directory |
 | `ARCHIVE_LOG_FILE` | `archive-service.log` | log file name, empty = no log file (the old name `ARCHIVE_LOGFILE` also works) |

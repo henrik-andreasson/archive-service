@@ -24,6 +24,9 @@ The tests are in `tests/`:
 * `test_client.py` and `test_gunicorn_start.py` (marked `integration`) start
   real gunicorn servers, the TLS tests create certificates with `openssl`
   (skipped if it is missing)
+* `test_ui_browser.py` (`integration`) uses the web UI in headless
+  Chrome/Chromium, driven by `tests/ui_browser.mjs` (Node 22 or newer), it is
+  skipped if they are missing
 
 The tests run on GitHub Actions on every push and pull request
 (`.github/workflows/tests.yml`): pytest on Python 3.11 - 3.13, a Docker build

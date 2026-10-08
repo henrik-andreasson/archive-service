@@ -10,6 +10,7 @@ archive, so they can be deleted locally.
   as `<client ip>/<bucket>/<date>/<uuid>`
 * TLS with client certificates, runs in Docker or directly with gunicorn
 * the client can store on several servers, clustered or standalone
+* an optional web UI to upload and browse files
 
 # Quick start
 
@@ -23,10 +24,12 @@ ARCHIVE_UID=$(id -u) docker compose up -d --build
 Or without Docker:
 
 ```
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 mkdir -p archive-data logs
-PATH="$PWD/.venv/bin:$PATH" ARCHIVE_UPLOAD_DIR="$PWD/archive-data" ARCHIVE_LOG_DIR="$PWD/logs" \
-  ./gunicorn-start.sh
+export ARCHIVE_UPLOAD_DIR="$PWD/archive-data"
+export ARCHIVE_LOG_DIR="$PWD/logs"
+./gunicorn-start.sh
 ```
 
 Store a file and get it back with the client:
@@ -48,6 +51,7 @@ This runs plain HTTP, for production use TLS with client certificates.
 * [Configuration](docs/configuration.md) - all settings
 * [TLS and client certificates](docs/tls.md)
 * [Client](docs/client.md)
+* [Web UI](docs/web-ui.md) - upload and browse in the browser (off by default)
 * [API](docs/api-doc.md)
 * [Development](docs/development.md) - tests and building these docs
 

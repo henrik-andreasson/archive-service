@@ -34,6 +34,8 @@ class Config(object):
     # delete is off unless explicitly enabled
     ARCHIVE_ALLOW_REMOVE = os.environ.get('ARCHIVE_ALLOW_REMOVE') or "false"
     ARCHIVE_DEBUG = os.environ.get('ARCHIVE_DEBUG') or "false"
+    # the web front-end at /ui/, off by default
+    ARCHIVE_UI = os.environ.get('ARCHIVE_UI') or "false"
     # largest upload in MB, 0 = no limit
     ARCHIVE_MAX_UPLOAD_MB = os.environ.get('ARCHIVE_MAX_UPLOAD_MB') or "1024"
     ARCHIVE_LOG_DIR = os.environ.get('ARCHIVE_LOG_DIR') or "/tmp"
@@ -57,7 +59,7 @@ def normalize_config(config):
     types, raises ValueError with a readable message on bad values"""
     for key in ('ARCHIVE_BUCKETS', 'ARCHIVE_IPS_HEALTH'):
         config[key] = to_list(config[key])
-    for key in ('ARCHIVE_ALLOW_REMOVE', 'ARCHIVE_DEBUG', 'ARCHIVE_LOG_STDERR'):
+    for key in ('ARCHIVE_ALLOW_REMOVE', 'ARCHIVE_DEBUG', 'ARCHIVE_LOG_STDERR', 'ARCHIVE_UI'):
         config[key] = to_bool(config[key])
 
     for key in ('ARCHIVE_PROXY_COUNT', 'ARCHIVE_MAX_UPLOAD_MB', 'ARCHIVE_LOG_MAX_MB', 'ARCHIVE_LOG_BACKUPS'):
