@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Environment:
-#   INSTALL_PATH  directory of the service (default the directory of this script)
+#   INSTALL_PATH  directory of the service (default the directory of this script),
+#              gunicorn from INSTALL_PATH/.venv is used if it exists, else from PATH
 #   CERT, KEY  server cert and key (PEM, newlines may be replaced with ';')
 #              both are needed to enable TLS
 #   CA         CA cert (PEM) used to verify client certificates
@@ -19,6 +20,17 @@ if [ "x${INSTALL_PATH}" == "x" ] ; then
 fi
 
 cd "${INSTALL_PATH}" || exit 1
+
+# use the virtualenv in the service directory if there is one
+if [ -x "${INSTALL_PATH}/.venv/bin/gunicorn" ] ; then
+  GUNICORN="${INSTALL_PATH}/.venv/bin/gunicorn"
+elif command -v gunicorn >/dev/null ; then
+  GUNICORN=gunicorn
+else
+  echo "ERROR: gunicorn not found, install it in a virtualenv in ${INSTALL_PATH}:" >&2
+  echo "       python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
+  exit 1
+fi
 
 # --- check the settings before anything is written ---------------------------
 
@@ -96,7 +108,7 @@ else
   echo "WARNING: running plain HTTP without TLS or client certificates" >&2
 fi
 
-exec gunicorn archive-service:app -b 0.0.0.0:${LISTEN} \
+exec "${GUNICORN}" archive-service:app -b 0.0.0.0:${LISTEN} \
      --pid "${INSTALL_PATH}/archive.pid" \
      --timeout "${WORKER_TIMEOUT}" \
      ${TLS_OPTIONS} ${OPTIONS}

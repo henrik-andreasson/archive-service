@@ -23,10 +23,12 @@ ARCHIVE_UID=$(id -u) docker compose up -d --build
 Or without Docker:
 
 ```
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 mkdir -p archive-data logs
-PATH="$PWD/.venv/bin:$PATH" ARCHIVE_UPLOAD_DIR="$PWD/archive-data" ARCHIVE_LOG_DIR="$PWD/logs" \
-  ./gunicorn-start.sh
+export ARCHIVE_UPLOAD_DIR="$PWD/archive-data"
+export ARCHIVE_LOG_DIR="$PWD/logs"
+./gunicorn-start.sh
 ```
 
 Store a file and get it back with the client:

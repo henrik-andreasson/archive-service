@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import sys
 
 import pytest
 import requests
@@ -162,6 +163,31 @@ def test_install_path_defaults_to_script_dir(install, tmp_path):
         assert (install / "archive.pid").exists()
     finally:
         stop(proc)
+
+
+SYSTEM_PATH = "/usr/bin:/bin"
+
+
+@pytest.mark.skipif(not os.path.exists("/proc/self/cmdline"), reason="needs /proc")
+def test_uses_venv_in_install_dir(install):
+    """gunicorn is not on the PATH, but in .venv in the service directory"""
+    venv_bin = install / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    os.symlink(os.path.join(os.path.dirname(sys.executable), "gunicorn"), venv_bin / "gunicorn")
+    url, proc = start_plain(install, PATH=SYSTEM_PATH)
+    try:
+        assert requests.get(url).status_code == 200
+        assert any(arg.endswith(b"/.venv/bin/gunicorn") for arg in cmdline(proc.pid))
+    finally:
+        stop(proc)
+
+
+@pytest.mark.skipif(shutil.which("gunicorn", path=SYSTEM_PATH) is not None, reason="gunicorn installed system wide")
+def test_gunicorn_missing(install):
+    p = run_start(install, PATH=SYSTEM_PATH)
+    assert p.returncode == 1
+    assert "gunicorn not found" in p.stderr
+    assert "pip install -r requirements.txt" in p.stderr
 
 
 @pytest.mark.skipif(not os.path.exists("/proc/self/cmdline"), reason="needs /proc")
