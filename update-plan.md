@@ -409,7 +409,7 @@ Steps:
    - Cross-site protection: requests that change data are refused if the browser's `Origin` header names another site (curl and the CLI send no `Origin`).
    - Security headers on all responses: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
 2. ✅ **The page**, behind `ARCHIVE_UI` (default off): **done**
-3. **Tests and docs**: `/ui/` served only when enabled, a "Web UI" docs page including how to import a client cert (`.p12`) into a browser.
+3. ✅ **Tests and docs**: `/ui/` served only when enabled, a "Web UI" docs page including how to import a client cert (`.p12`) into a browser: **done**
 4. ✅ **Cleanup**: remove the unused `app/static/loading.gif`: **done** (with step 2)
 
 **Step 1 status:** done.
@@ -433,3 +433,17 @@ Steps:
   - A file named `<img src=x onerror=alert(1)>.txt` is shown as text.
   - No console errors or CSP violations, after adding a favicon (the browser's automatic `/favicon.ico` request gave a 404).
 - Found while testing: `archive.pid` in the repo pointed at a running process (PID 420719, gone a moment later, possibly a server started from the README steps), so a second server from the same directory refused to start ("Already running on PID …"). That is gunicorn protecting a running server, as intended. Test servers now run from a temp copy so they never share the pid file.
+
+**Step 3 status:** done. §11 is complete.
+- Browser test: `tests/test_ui_browser.py` runs `tests/ui_browser.mjs`, which drives headless Chrome/Chromium over the DevTools protocol (Node 22+, no npm packages) against a real gunicorn server. It checks:
+  - secure context, client address and buckets;
+  - a CLI-stored file named `<img src=x onerror=alert(1)>.txt` shown as text;
+  - a browser upload → "stored, sha256 matches" and it appears in the list;
+  - delete through the page, with the confirm dialog accepted, removes it;
+  - no console errors or CSP violations.
+
+  It is skipped without a browser or Node. Checked that it fails if file names are rendered as HTML. The workflow's pytest job installs Node 22 (Chrome is on the GitHub runner).
+- `docs/web-ui.md`, with a light-mode screenshot (`docs/img/web-ui.png`, taken by the test script): turning it on, what it does, the HTTPS requirement for the sha256 check, per-address storage, client certificates in the browser (making a `.p12`, importing in Firefox, Chrome on Linux, and the Windows/macOS system stores), and the security notes. Linked from mkdocs, the README, the overview and the TLS page.
+- `conf/test-certs/archive-client.test.gazonk.se.p12`: the test client cert, key and CA for a browser, password `archive-test`.
+- Not tested: importing the `.p12` into a real browser and using the page over TLS with a client certificate (headless Chrome can't pick a client certificate without extra policy setup).
+- All 217 tests pass; the docs build with `--strict`.

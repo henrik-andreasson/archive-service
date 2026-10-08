@@ -3,6 +3,8 @@ Test certificates, do NOT use in production.
 ca.pem                                   Gazonk CA (valid to 2036)
 archive-server.test.gazonk.se.{crt,key}  server cert, SAN DNS:archive-server.test.gazonk.se
 archive-client.test.gazonk.se.{crt,key}  client cert (TLS Web Client Authentication)
+archive-client.test.gazonk.se.p12        client cert, key and CA for importing into a
+                                         browser, password: archive-test
 
 The server cert is only valid for archive-server.test.gazonk.se, connect using
 that name, eg. add it to /etc/hosts or use curl --resolve:

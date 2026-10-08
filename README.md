@@ -10,6 +10,7 @@ archive, so they can be deleted locally.
   as `<client ip>/<bucket>/<date>/<uuid>`
 * TLS with client certificates, runs in Docker or directly with gunicorn
 * the client can store on several servers, clustered or standalone
+* an optional web UI to upload and browse files
 
 # Quick start
 
@@ -50,6 +51,7 @@ This runs plain HTTP, for production use TLS with client certificates.
 * [Configuration](docs/configuration.md) - all settings
 * [TLS and client certificates](docs/tls.md)
 * [Client](docs/client.md)
+* [Web UI](docs/web-ui.md) - upload and browse in the browser (off by default)
 * [API](docs/api-doc.md)
 * [Development](docs/development.md) - tests and building these docs
 

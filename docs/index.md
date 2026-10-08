@@ -10,6 +10,7 @@ archive, so they can be deleted locally.
 * TLS with client certificates, see [TLS](tls.md)
 * runs in Docker, see [Docker](docker.md), or directly with gunicorn, see
   [Run the server](run-server.md)
+* an optional [web UI](web-ui.md) to upload and browse files in the browser
 
 ## How files are stored
 

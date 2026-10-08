@@ -70,6 +70,7 @@ production**:
 | `ca.pem` | test CA (Gazonk CA) |
 | `archive-server.test.gazonk.se.{crt,key}` | server cert for `archive-server.test.gazonk.se` |
 | `archive-client.test.gazonk.se.{crt,key}` | client cert |
+| `archive-client.test.gazonk.se.p12` | client cert, key and CA for a browser, password `archive-test`, see [Web UI](web-ui.md#client-certificates-in-the-browser) |
 
 The server cert is only valid for `archive-server.test.gazonk.se`, add it to
 `/etc/hosts` or use `curl --resolve`:

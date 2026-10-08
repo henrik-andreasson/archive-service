@@ -20,6 +20,11 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
 
+      # for the browser test of the web front-end (Chrome is on the runner)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
