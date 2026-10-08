@@ -1,5 +1,6 @@
 """the web front-end in a real headless browser, skipped without Chrome/Chromium and Node"""
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -10,8 +11,11 @@ from conftest import ROOT, clean_env
 
 pytestmark = pytest.mark.integration
 
-CHROME = next((shutil.which(name) for name in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
-               if shutil.which(name)), None)
+# CHROME picks the browser, else the first one found. google-chrome first:
+# on Ubuntu chromium-browser can be a stub that only asks to install the snap
+CHROME = os.environ.get("CHROME") or next(
+    (shutil.which(name) for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+     if shutil.which(name)), None)
 NODE = shutil.which("node")
 
 needs_browser = pytest.mark.skipif(CHROME is None or NODE is None, reason="needs Chrome/Chromium and Node")
@@ -39,7 +43,11 @@ def test_ui_in_browser(ui_server, tmp_path):
 
     p = subprocess.run([NODE, str(ROOT / "tests" / "ui_browser.mjs"), CHROME, ui_server + "/ui/", str(upload)],
                        capture_output=True, text=True, timeout=120)
-    result = json.loads(p.stdout)
+    try:
+        result = json.loads(p.stdout)
+    except ValueError:
+        pytest.fail("ui_browser.mjs printed no result, exit %s\nstdout: %s\nstderr: %s"
+                    % (p.returncode, p.stdout[-2000:], p.stderr[-2000:]))
     assert "error" not in result, result
 
     # 127.0.0.1 is a secure context, so the sha256 is checked in the browser

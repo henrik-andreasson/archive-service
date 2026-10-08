@@ -447,3 +447,8 @@ Steps:
 - `conf/test-certs/archive-client.test.gazonk.se.p12`: the test client cert, key and CA for a browser, password `archive-test`.
 - Not tested: importing the `.p12` into a real browser and using the page over TLS with a client certificate (headless Chrome can't pick a client certificate without extra policy setup).
 - All 217 tests pass; the docs build with `--strict`.
+- **CI fix (browser test):** the first GitHub Actions runs failed only in `test_ui_browser.py`. 3.11 timed out waiting for the browser; 3.12/3.13 crashed silently because the script had no handler for a browser that fails to start. The test picked `chromium-browser` first, which on Ubuntu can be a stub asking to install the snap.
+  - **Fixed:** `google-chrome` is preferred, and the `CHROME` environment variable picks the browser (the workflow sets `CHROME=google-chrome`).
+  - The script reports a browser that can't start or exits early, with the end of its stderr, and always prints a JSON result.
+  - pytest shows the raw output if there is no result.
+  - Checked locally against a real browser, a snap-like stub and a missing browser; still to be confirmed on GitHub Actions.

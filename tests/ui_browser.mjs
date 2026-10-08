@@ -13,23 +13,42 @@ import path from "node:path";
 const [chrome, url, uploadFile, screenshot] = process.argv.slice(2);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const result = { problems: [] };
+
+// always print a json result, also if something unexpected fails
+function finish(code = 0) {
+  console.log(JSON.stringify(result));
+  process.exit(code);
+}
+process.on("uncaughtException", (e) => {
+  result.error = "uncaught: " + (e.stack || e);
+  finish();
+});
+
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), "archive-ui-chrome-"));
 const browser = spawn(chrome, [
   "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu",
-  "--no-sandbox", "--remote-debugging-port=0", "--user-data-dir=" + profile, "about:blank",
-], { stdio: "ignore" });
+  "--disable-dev-shm-usage", "--no-sandbox", "--remote-debugging-port=0",
+  "--user-data-dir=" + profile, "about:blank",
+], { stdio: ["ignore", "ignore", "pipe"] });
 
-async function waitFor(check, what, timeout = 15000) {
+// keep the end of chrome's output to explain a failed start
+let browserLog = "";
+let browserExit = null;
+browser.stderr.on("data", (d) => (browserLog = (browserLog + d).slice(-2000)));
+browser.on("error", (e) => (browserExit = "can not start " + chrome + ": " + e.message));
+browser.on("exit", (code, signal) => (browserExit = browserExit || `${chrome} exited (code ${code}, signal ${signal})`));
+
+async function waitFor(check, what, timeout = 20000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
+    if (browserExit) throw new Error(browserExit);
     const value = await check();
     if (value) return value;
     await sleep(100);
   }
   throw new Error("timeout waiting for " + what);
 }
-
-const result = { problems: [] };
 try {
   // chrome writes the port it picked to DevToolsActivePort
   const port = await waitFor(() => {
@@ -110,9 +129,9 @@ try {
   ws.close();
 } catch (e) {
   result.error = String(e);
+  result.browser_log = browserLog;
 } finally {
   browser.kill();
   fs.rmSync(profile, { recursive: true, force: true });
 }
-console.log(JSON.stringify(result));
-process.exit(0);
+finish();

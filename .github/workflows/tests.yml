@@ -29,7 +29,12 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run tests
-        run: python -m pytest
+        env:
+          # the browser for the web UI test, preinstalled on the runner
+          CHROME: google-chrome
+        run: |
+          google-chrome --version
+          python -m pytest
 
   docker:
     runs-on: ubuntu-latest
