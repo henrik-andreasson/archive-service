@@ -34,6 +34,10 @@ eg.
 * **uuid** - returned when the file is stored, together with the bucket and
   date it is needed to get, hash or delete the file
 
+Next to each file the server keeps `<uuid>.json` with the original file name,
+size, sha256 and the time it was stored. `list` with `?details=1` returns this
+for the files on a date, see [API](api-doc.md).
+
 A client can only see and get its own files. Deleting files is off by default
 (`ARCHIVE_ALLOW_REMOVE`). See [Configuration](configuration.md) for all
 settings.

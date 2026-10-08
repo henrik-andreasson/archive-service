@@ -386,3 +386,37 @@ Small open items, and problems found while writing the test suite (§8).
   - Tested: for every refused configuration, no `.pem` file appears in the install dir and the `TLS_DIR` is not created.
 - **Docs:** `docs/run-server.md` (`TIMEOUT` and `TLS_DIR` in the settings table, new `INSTALL_PATH` default, large-upload note), `docs/tls.md` (where the cert files go) and the README quick start are updated. The `.gitignore` now ignores `/*.pem` in the repo root ("never commit keys"), plus `/archive.pid`.
 - All 171 tests pass (9 new for these fixes), and the docs build with `--strict`.
+
+
+## 11. Simple web front-end
+
+A small web UI for uploading and browsing your own files, served by the service at `/ui/`.
+
+**Decisions:** off by default (`ARCHIVE_UI=true` to turn it on); metadata stored in a JSON file next to each upload.
+
+Design:
+- One static HTML page with plain JavaScript in `app/static/`, calling the existing JSON API. No framework, no build step, no CDN (works offline, strict Content-Security-Policy).
+- Upload with drag and drop, bucket picker, progress bar (`XMLHttpRequest`) and a receipt (uuid, date, sha256, copy button).
+- sha256 checked in the browser with `crypto.subtle` (only on HTTPS or localhost; skipped for very large files, the page says so).
+- Browse bucket → date → files with name, size and time stored; get, hash, and delete when the server allows it.
+- Shows the client address the server sees (files are grouped per IP).
+
+Steps:
+1. ✅ **Server changes** (backwards-compatible), with tests: **done**
+   - Metadata: `store` writes `<uuid>.json` next to the file (original name, size, sha256, time stored); `delete` removes it; `list` hides it.
+   - `list` with `?details=1` on the date level returns objects with the metadata; the plain list is unchanged for the CLI.
+   - `GET /archive/info/v1`: buckets, whether delete is enabled, upload limit, the client address.
+   - Cross-site protection: requests that change data are refused if the browser's `Origin` header names another site (curl and the CLI send no `Origin`).
+   - Security headers on all responses: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
+2. **The page**, behind `ARCHIVE_UI` (default off).
+3. **Tests and docs**: `/ui/` served only when enabled, a "Web UI" docs page including how to import a client cert (`.p12`) into a browser.
+4. **Cleanup**: remove the unused `app/static/loading.gif`.
+
+**Step 1 status:** done.
+- `store` writes `<uuid>.json` (uuid, original name without directories, max 255 characters, size, sha256, time stored in `ARCHIVE_TZ`, bucket, date) and returns `name` and `size` as well. `delete` removes the metadata. `list` on a date shows only the uuids, so the CLI output is unchanged.
+- `list ...?details=1` on a date returns `[{uuid, name, size, sha256, stored}]`. Files stored before this change get `null` for name, sha256 and stored.
+- `GET /archive/info/v1`: buckets, `allow_remove`, `max_upload_mb`, `client_address`.
+- Requests that change data (POST, DELETE) with an `Origin` header from another site → 403 "Cross-site request not allowed". The host is compared, not the scheme, so it also works behind a TLS proxy. GET is not affected.
+- Security headers on every response, including errors and downloads: `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`.
+- `docs/api-doc.md` is regenerated (new `info` section, details, cross-site 403) and `docs/index.md` mentions the metadata.
+- Tests: `tests/test_metadata.py` and `tests/test_info_and_browser.py`, 25 new; all 198 pass. Werkzeug already drops backslashes from uploaded file names, so Windows paths can't add directories either.
