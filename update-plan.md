@@ -452,3 +452,8 @@ Steps:
   - The script reports a browser that can't start or exits early, with the end of its stderr, and always prints a JSON result.
   - pytest shows the raw output if there is no result.
   - Checked locally against a real browser, a snap-like stub and a missing browser; still to be confirmed on GitHub Actions.
+- **CI fix, second round:** with the first fix Chrome started on the runners and every check passed; Python 3.12 passed, but 3.11 and 3.13 still failed.
+  - **Cause:** the script removed Chrome's temporary profile while Chrome and its helper processes were still stopping, which failed with `ENOTEMPTY` on slow machines and was reported as an error. Reproduced locally by running the test on one loaded CPU core.
+  - **Fixed:** Chrome runs in its own process group. The script stops the whole group, waits for it to exit, removes the profile with retries, and a cleanup problem no longer fails the test.
+  - The test also reports the step that failed and prints the error and the browser log in full (pytest shortened it before).
+  - Checked: 12 of 12 runs pass on one loaded core, with no profile folders or Chrome processes left; all 217 tests pass.

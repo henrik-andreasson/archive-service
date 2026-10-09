@@ -30,7 +30,7 @@ const browser = spawn(chrome, [
   "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu",
   "--disable-dev-shm-usage", "--no-sandbox", "--remote-debugging-port=0",
   "--user-data-dir=" + profile, "about:blank",
-], { stdio: ["ignore", "ignore", "pipe"] });
+], { stdio: ["ignore", "ignore", "pipe"], detached: true });
 
 // keep the end of chrome's output to explain a failed start
 let browserLog = "";
@@ -40,6 +40,7 @@ browser.on("error", (e) => (browserExit = "can not start " + chrome + ": " + e.m
 browser.on("exit", (code, signal) => (browserExit = browserExit || `${chrome} exited (code ${code}, signal ${signal})`));
 
 async function waitFor(check, what, timeout = 20000) {
+  result.step = what;
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     if (browserExit) throw new Error(browserExit);
@@ -131,7 +132,27 @@ try {
   result.error = String(e);
   result.browser_log = browserLog;
 } finally {
-  browser.kill();
-  fs.rmSync(profile, { recursive: true, force: true });
+  // chrome keeps writing to its profile while it stops, wait for it to exit
+  // before removing the profile, and never fail the test on the cleanup
+  // stop chrome and its helper processes (own process group, detached)
+  if (browserExit === null) {
+    const exited = new Promise((r) => browser.once("exit", r));
+    try {
+      process.kill(-browser.pid, "SIGTERM");
+    } catch {
+      browser.kill();
+    }
+    await Promise.race([exited, sleep(5000)]);
+  }
+  try {
+    process.kill(-browser.pid, "SIGKILL");
+  } catch {
+    // all gone
+  }
+  try {
+    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (e) {
+    console.error("could not remove " + profile + ": " + e.message);
+  }
 }
 finish();

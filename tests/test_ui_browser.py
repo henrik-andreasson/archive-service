@@ -48,7 +48,9 @@ def test_ui_in_browser(ui_server, tmp_path):
     except ValueError:
         pytest.fail("ui_browser.mjs printed no result, exit %s\nstdout: %s\nstderr: %s"
                     % (p.returncode, p.stdout[-2000:], p.stderr[-2000:]))
-    assert "error" not in result, result
+    assert "error" not in result, "%s (step: %s)\nbrowser log: %s\nresult: %s" % (
+        result["error"], result.get("step"), result.get("browser_log"), json.dumps(result, indent=1)) \
+        if "error" in result else ""
 
     # 127.0.0.1 is a secure context, so the sha256 is checked in the browser
     assert result["secure_context"] is True
