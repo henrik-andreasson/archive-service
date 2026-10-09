@@ -103,6 +103,7 @@ try {
   result.secure_context = await js("window.isSecureContext");
   result.client = await js("document.getElementById('client').textContent");
   result.buckets = await js("[...document.getElementById('upload-bucket').options].map(o => o.value)");
+  await waitFor(async () => (await rows("browse")).length > 0, "file list");
   result.browse_before = await rows("browse");
   result.html_elements_in_names = await js("document.querySelectorAll('#browse td img, #browse td script').length");
 
@@ -125,7 +126,11 @@ try {
   await js(`[...document.querySelectorAll('#browse tbody tr')]
     .find(r => r.cells[0].textContent === ${JSON.stringify(name)})
     .querySelector('button.danger').click()`);
-  await waitFor(async () => !(await rows("browse")).some((r) => r[0] === name), "delete");
+  // wait for the reloaded list: not empty and without the deleted file
+  await waitFor(async () => {
+    const list = await rows("browse");
+    return list.length > 0 && !list.some((r) => r[0] === name);
+  }, "delete");
   result.browse_after_delete = await rows("browse");
   ws.close();
 } catch (e) {

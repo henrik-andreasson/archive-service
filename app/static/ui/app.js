@@ -172,12 +172,10 @@ async function loadDates() {
 async function loadFiles() {
   const bucket = $("browse-bucket").value;
   const date = $("browse-date").value;
-  const body = $("browse").tBodies[0];
-  body.replaceChildren();
-
+  // fetch first and replace all rows at once, so the table doesn't flicker empty
   const files = date ? await api("/list/v1/" + path(bucket, date) + "/?details=1") : [];
   files.sort((a, b) => (b.stored || "").localeCompare(a.stored || ""));
-  for (const f of files) body.append(fileRow(bucket, date, f));
+  $("browse").tBodies[0].replaceChildren(...files.map((f) => fileRow(bucket, date, f)));
 
   $("browse").hidden = files.length === 0;
   $("browse-empty").hidden = files.length > 0;

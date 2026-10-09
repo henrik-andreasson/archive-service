@@ -457,3 +457,7 @@ Steps:
   - **Fixed:** Chrome runs in its own process group. The script stops the whole group, waits for it to exit, removes the profile with retries, and a cleanup problem no longer fails the test.
   - The test also reports the step that failed and prints the error and the browser log in full (pytest shortened it before).
   - Checked: 12 of 12 runs pass on one loaded core, with no profile folders or Chrome processes left; all 217 tests pass.
+- **CI fix, third round:** with the cleanup fixed, 3.11 and 3.13 passed and 3.12 failed once: the snapshot after deleting a file was empty.
+  - **Cause:** the page cleared the file list before reloading it, and the test's wait condition ("the deleted file is gone") was already true while the list was briefly empty.
+  - **Fixed in the page:** it fetches first and then replaces all rows at once, so the list no longer flickers empty.
+  - **Fixed in the test:** it waits for the expected list (not empty, without the deleted file) and for the list to load before the first snapshot.
